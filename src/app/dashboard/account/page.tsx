@@ -1,0 +1,9 @@
+"use client";
+
+import { useAuth } from "@/components/auth-provider";
+import { PageHeading } from "@/components/dashboard-ui";
+
+export default function AccountPage() {
+  const { user } = useAuth(); if (!user) return null;
+  return <><PageHeading eyebrow="Profile" title="Account" description="Identity details are read-only because the current backend does not expose a profile update or password change endpoint." /><section className="max-w-3xl border border-white/10 bg-[#12120f] p-6 md:p-8"><div className="grid gap-6 sm:grid-cols-2"><label className="grid gap-2 text-xs font-bold uppercase tracking-[.1em] text-[#777066]">Name<input value={user.name} readOnly className="border border-white/10 bg-black/20 px-4 py-3 text-sm font-normal normal-case tracking-normal text-[#c9c2b4]" /></label><label className="grid gap-2 text-xs font-bold uppercase tracking-[.1em] text-[#777066]">Email<input value={user.email} readOnly className="border border-white/10 bg-black/20 px-4 py-3 text-sm font-normal normal-case tracking-normal text-[#c9c2b4]" /></label><label className="grid gap-2 text-xs font-bold uppercase tracking-[.1em] text-[#777066]">Account ID<input value={user.id} readOnly className="border border-white/10 bg-black/20 px-4 py-3 font-mono text-xs font-normal normal-case tracking-normal text-[#938c80]" /></label><label className="grid gap-2 text-xs font-bold uppercase tracking-[.1em] text-[#777066]">Plan<input value={user.plan} readOnly className="border border-white/10 bg-black/20 px-4 py-3 text-sm font-normal normal-case tracking-normal text-[#c9c2b4]" /></label></div><div className="mt-8 border-l-2 border-gold bg-gold/5 px-4 py-3 text-xs leading-5 text-[#9e978b]">Current web authentication stores the bearer token in browser localStorage to match the existing API. A production deployment should migrate authentication to secure, HTTP-only cookies or a server-managed session once the backend supports it.</div></section></>;
+}

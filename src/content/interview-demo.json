@@ -1,0 +1,23 @@
+[
+  {
+    "label": "Tell me about yourself",
+    "prompt": "Tell me about yourself",
+    "answer": "**30-second answer**\n\nI am a product-focused software engineer who turns ambiguous customer problems into reliable, measurable products. In my current role, I work across engineering and stakeholders to ship features from discovery through production.\n\n**What makes me relevant**\n\n- I balance **delivery speed** with maintainable systems.\n- I communicate trade-offs clearly across technical and business teams.\n- I stay close to outcomes, not just output.\n\n**Close with intent:** I am now looking for a role where I can bring that ownership to a larger product surface and keep growing with a strong team.",
+    "firstTokenMs": 184,
+    "totalMs": 1280
+  },
+  {
+    "label": "Testing strategy",
+    "prompt": "How would you test a feature before release?",
+    "answer": "**Start with risk, not a checklist.** I would identify the highest-impact user journeys, define acceptance criteria, and cover the logic with unit tests. Then I would add integration tests at system boundaries and one end-to-end test for the critical path. Before release, I would verify observability, rollback readiness, and a small production canary.",
+    "firstTokenMs": 196,
+    "totalMs": 1120
+  },
+  {
+    "label": "Difficult stakeholder",
+    "prompt": "How should I answer: Tell me about a difficult stakeholder?",
+    "answer": "**Use STAR and keep the tension professional.** Describe the shared goal, explain the disagreement with facts, show how you listened and aligned on success criteria, then quantify the result. Focus on how you built trust rather than proving the other person wrong.",
+    "firstTokenMs": 173,
+    "totalMs": 980
+  }
+]
