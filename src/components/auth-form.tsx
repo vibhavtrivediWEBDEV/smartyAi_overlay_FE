@@ -30,7 +30,7 @@ export function AuthForm({ mode, redirectTo = "/dashboard" }: { mode: "login" | 
         body: JSON.stringify({ name: data.get("name"), email: data.get("email"), password: data.get("password") }),
       });
       saveAccessToken(payload.token);
-      router.push(redirectTo);
+      router.push(payload.user.isAdmin ? "/dashboard/admin" : redirectTo);
     } catch (caught) {
       setError(getAuthErrorMessage(caught, mode));
     } finally {

@@ -49,6 +49,7 @@ export type Account = {
   creditCosts: Plan["creditCosts"];
   atsOptimizationsUsed: number;
   atsOptimizationsRemaining: number;
+  isAdmin?: boolean;
   isAuthenticated?: boolean;
 };
 
@@ -86,6 +87,7 @@ export function normalizeAccount(account: Partial<Account>): Account {
       account.atsOptimizationsRemaining,
       Math.max(0, plan.atsResumeLimit - atsOptimizationsUsed),
     ),
+    isAdmin: account.isAdmin === true,
     isAuthenticated: account.isAuthenticated,
   };
 }
