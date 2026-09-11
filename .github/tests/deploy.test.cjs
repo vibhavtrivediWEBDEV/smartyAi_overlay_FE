@@ -5,11 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-// Exercise the actual remote Bash from the workflow with real Git repositories.
+// Exercise the actual EC2 Bash file with real Git repositories.
 // npm, PM2, curl, and flock are isolated fakes; no production services are touched.
 const workflow = fs.readFileSync(path.join(__dirname, '../workflows/deploy.yml'), 'utf8');
-const remote = workflow.match(/<<'REMOTE'\n([\s\S]*?)^          REMOTE$/m)[1]
-  .split('\n').map(line => line.replace(/^          /, '')).join('\n');
+const remote = fs.readFileSync(path.join(__dirname, '../scripts/deploy-frontend.sh'), 'utf8');
 
 function fixture(t, failure = '') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'smarty-deploy-test-'));
@@ -28,6 +27,8 @@ function fixture(t, failure = '') {
     MOCK_ROOT: root, MOCK_FAILURE: failure, MOCK_LIVE: live,
     GIT_AUTHOR_NAME: 'Deployment Test', GIT_AUTHOR_EMAIL: 'test@example.invalid',
     GIT_COMMITTER_NAME: 'Deployment Test', GIT_COMMITTER_EMAIL: 'test@example.invalid' };
+  // Allow the fixture to launch an independent node --test process.
+  delete env.NODE_TEST_CONTEXT;
   function git(cwd, ...args) {
     const result = spawnSync('git', args, { cwd, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -36,6 +37,18 @@ function fixture(t, failure = '') {
   git(source, 'init', '-b', 'main');
   write(path.join(source, '.gitignore'), '.env\n.next/\nnode_modules/\n');
   write(path.join(source, 'version.txt'), 'old');
+  // A minimal fixture stage avoids recursively running this entire suite.
+  write(path.join(source, '.github/tests/deploy.test.cjs'), `
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+test('candidate safeguard stage', () => {
+  fs.appendFileSync(path.join(process.env.MOCK_ROOT, 'events'), 'safeguards\\n');
+  assert.equal(fs.existsSync('.env'), false, 'Tests must precede production configuration');
+  assert.notEqual(process.env.MOCK_FAILURE, 'safeguards');
+});
+`);
   git(source, 'add', '.');
   git(source, 'commit', '-m', 'Working release');
   git(root, 'clone', source, live);
@@ -108,7 +121,20 @@ if (process.env.MOCK_FAILURE === 'health' && app.pm2_env.pm_cwd !== process.env.
   return { root, home, live, upload, source, sha, oldSha, git, run, state, events, unchangedLive };
 }
 
-for (const failure of ['install', 'build']) {
+test('GitHub delegates tests, installation, and build to the EC2 Bash file', () => {
+  assert.doesNotMatch(workflow, /actions\/setup-node|\bnpm\s+(?:ci|install|test|run)|\bnode\s+--test|<<'REMOTE'/);
+  const ssh = workflow.split('\n').find(line => /^\s+ssh .*bash -s --/.test(line));
+  assert.ok(ssh, 'Workflow must run the remote Bash file over SSH');
+  assert.match(ssh, /< \.github\/scripts\/deploy-frontend\.sh$/);
+  const validation = remote.slice(remote.indexOf('cd "$release_dir"'), remote.indexOf('switching=1'));
+  for (const command of ['node --test .github/tests/deploy.test.cjs', 'npm ci', 'npm run build']) {
+    assert.ok(validation.includes(command), `${command} must precede activation on EC2`);
+  }
+  assert.match(workflow, /name: Verify public HTTPS/);
+  assert.match(workflow, /curl --fail/);
+});
+
+for (const failure of ['safeguards', 'install', 'build']) {
   test(`${failure} failure keeps old build, dependencies, Git HEAD, and running process`, t => {
     const f = fixture(t, failure);
     const result = f.run();
@@ -147,7 +173,7 @@ test('success switches only after build, retains old release, and records exact 
   assert.equal(fs.readFileSync(path.join(current, '.env'), 'utf8'), 'ENV_SENTINEL=keep-private\n');
   assert.equal(fs.statSync(path.join(current, '.env')).mode & 0o777, 0o600);
   assert.equal(f.git(f.live, 'rev-parse', 'refs/deployments/frontend'), f.sha);
-  assert.equal(f.events(), 'install\nbuild\ndelete\nstart\nsave\n');
+  assert.equal(f.events(), 'safeguards\ninstall\nbuild\ndelete\nstart\nsave\n');
   assert.equal(fs.existsSync(f.upload), false);
 });
 

@@ -14,6 +14,16 @@ npm run dev
 
 The default frontend is `http://localhost:3000`. API requests use the deployed SmartyAI backend at `https://bhavishya.site`.
 
+## EC2 deployment
+
+Pushes to `main` trigger [the GitHub workflow](.github/workflows/deploy.yml). GitHub checks out and bundles the exact commit, transfers it over trusted SSH, and executes [the frontend Bash script](.github/scripts/deploy-frontend.sh) on EC2. SSH streams the remote logs and propagates success/failure. Public HTTPS checks run on GitHub afterward; there is no dependency installation or build on the GitHub runner.
+
+The EC2 script takes the shared deployment lock and creates an isolated release. It runs deployment-safety tests using temporary repositories and fake services, copies the production configuration for Next.js, then runs `npm ci` and `npm run build` once. The tests run before production configuration is copied and before activation. Only a successful build can replace the named frontend PM2 process; the backend is not restarted.
+
+A failed test, installation, or build leaves the existing frontend process, dependencies, and build untouched. Activation, local health, or PM2-save failure restores the previous release configuration. This is rollback protection, not a second running replica or zero-downtime deployment. Previous releases are retained; monitor disk usage. Public HTTPS failure reports a failed workflow without rolling back an already locally healthy release. The original checkout stays unchanged, with the successful commit recorded at `refs/deployments/frontend`.
+
+Run the isolated deployment regressions locally with `node --test .github/tests/deploy.test.cjs`.
+
 ## Environment
 
 | Variable | Purpose |
