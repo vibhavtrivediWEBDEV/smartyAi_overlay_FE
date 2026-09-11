@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   description:
     "An interactive, non-production preview of the intended SmartyAI conversation workspace.",
   alternates: { canonical: "/" },
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
   openGraph: {
     title: "SmartyAI Demo",
     description: "Interactive product preview. Do not submit sensitive data.",
