@@ -1,0 +1,106 @@
+name: Deploy frontend to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the deployment commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Transfer, build, and restart frontend
+        shell: bash
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?Missing EC2_HOST}"
+          : "${EC2_USER:?Missing EC2_USER}"
+          : "${EC2_SSH_KEY:?Missing EC2_SSH_KEY}"
+          : "${EC2_KNOWN_HOSTS:?Missing EC2_KNOWN_HOSTS}"
+          [[ "$EC2_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$EC2_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$EC2_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          unset EC2_SSH_KEY EC2_KNOWN_HOSTS
+          ssh_options=(
+            -i "$ssh_dir/key"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts"
+            -o ConnectTimeout=15
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+          target="$EC2_USER@$EC2_HOST"
+          git bundle create "$ssh_dir/source.bundle" HEAD
+          upload_dir=$(ssh "${ssh_options[@]}" "$target" 'mktemp -d /tmp/smarty-frontend.XXXXXXXX')
+          [[ "$upload_dir" =~ ^/tmp/smarty-frontend\.[a-zA-Z0-9]+$ ]]
+          scp "${ssh_options[@]}" "$ssh_dir/source.bundle" "$target:$upload_dir/source.bundle"
+          ssh "${ssh_options[@]}" "$target" bash -s -- "$upload_dir" "$GITHUB_SHA" <<'REMOTE'
+          set -eo pipefail
+          upload_dir="$1"
+          release_sha="$2"
+          trap 'rm -f "$upload_dir/source.bundle"; rmdir "$upload_dir"' EXIT
+          exec 9>"$HOME/.smarty-deploy.lock"
+          flock -w 1200 9
+          cd "$HOME/smartyAi_overlay_FE"
+          test -f .env
+          test "$(git branch --show-current)" = main
+          if test -n "$(git status --porcelain --untracked-files=no)"; then
+            printf 'Deployment stopped: tracked files have local changes.\n' >&2
+            exit 1
+          fi
+          git bundle verify "$upload_dir/source.bundle"
+          git fetch --no-tags "$upload_dir/source.bundle" HEAD
+          test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
+          if git ls-tree --name-only "$release_sha" -- .env | grep -q .; then
+            printf 'Deployment stopped: production .env must remain untracked.\n' >&2
+            exit 1
+          fi
+          git merge --ff-only "$release_sha"
+          test "$(git rev-parse HEAD)" = "$release_sha"
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          npm ci --no-audit --no-fund
+          npm run build
+          pm2 restart smarty-frontend --update-env
+          pm2 save
+          curl --fail --silent --show-error --retry 8 --retry-delay 1 \
+            --retry-connrefused --max-time 15 --output /dev/null \
+            http://127.0.0.1:3000/login
+          printf 'Deployed frontend commit %s\n' "$release_sha"
+          REMOTE
+
+      - name: Verify public HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://bhavishya.site/ https://bhavishya.site/login https://www.bhavishya.site/; do
+            curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+              --connect-timeout 10 --max-time 20 --output /dev/null \
+              --write-out "$url HTTP %{http_code}\n" "$url"
+          done
