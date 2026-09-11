@@ -12,7 +12,7 @@ npm ci
 npm run dev
 ```
 
-The default frontend is `http://localhost:3000`. API requests use the deployed SmartyAI backend at `https://smarty-backend-em4h.onrender.com`.
+The default frontend is `http://localhost:3000`. API requests use the deployed SmartyAI backend at `https://bhavishya.site`.
 
 ## Environment
 
@@ -28,7 +28,7 @@ No AI provider credentials belong in this application. Provider secrets remain i
 Import this repository into Vercel and configure one environment value for Production, Preview, and Development:
 
 ```text
-NEXT_PUBLIC_API_BASE_URL=https://smarty-backend-em4h.onrender.com
+NEXT_PUBLIC_API_BASE_URL=https://bhavishya.site
 ```
 
 Set `NEXT_PUBLIC_SITE_URL` to the final Vercel production origin after the first deployment. Do not add provider keys, JWT secrets, database credentials, or other backend secrets to Vercel frontend variables. Values prefixed with `NEXT_PUBLIC_` are intentionally visible in browser code.

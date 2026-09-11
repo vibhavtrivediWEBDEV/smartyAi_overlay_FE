@@ -45,13 +45,15 @@ export function PricingPlans({ plans }: PricingPlansProps) {
                     <span><strong>{feature.title}</strong><small>{feature.detail}</small></span>
                   </div>
                 ))}
-                <div className="home-pricing-feature upcoming">
-                  <Clock3 size={15} aria-hidden="true" />
-                  <span>
-                    <strong>Naukri Apply <em>Coming soon</em></strong>
-                    <small>{plan.naukriApplications ? `${plan.naukriApplications.toLocaleString("en-IN")} planned applications for this plan after launch` : "Not included in this plan"}</small>
-                  </span>
-                </div>
+                {plan.naukriApplications > 0 && (
+                  <div className="home-pricing-feature upcoming">
+                    <Clock3 size={15} aria-hidden="true" />
+                    <span>
+                      <strong>Naukri Apply <em>Coming soon</em></strong>
+                      <small>{plan.naukriApplications.toLocaleString("en-IN")} planned applications for this plan after launch</small>
+                    </span>
+                  </div>
+                )}
               </div>
               <Link href={`/register?plan=${plan.key}`} className="home-pricing-cta">Choose {plan.name}<ArrowRight size={15} /></Link>
             </article>
