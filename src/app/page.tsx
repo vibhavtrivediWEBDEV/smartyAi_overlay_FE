@@ -79,7 +79,7 @@ const comparisonRows = [
 ];
 
 const faqs = [
-  ["How does screen-share protection work?", "The desktop app asks macOS or Windows to exclude its overlay from capture. That works in supported capture paths, but conferencing and monitoring tools do not all capture windows the same way, so no app can guarantee invisibility everywhere."],
+  ["How does screen-share protection work?", "The overlay uses operating-system capture protection, stays out of the macOS Dock or Windows taskbar, and remains available while you scroll or switch desktop windows. It is designed to stay out of supported screen-share paths used by Zoom, Microsoft Teams, and Google Meet. Share modes and capture tools vary, so verify protection before an important meeting; no app can guarantee invisibility in every environment."],
   ["What works on macOS and Windows?", "macOS 13+ supports the bundled local Whisper, Apple Vision OCR, and ScreenCaptureKit paths. Windows supports typed chat plus system-audio capture and offline transcription; microphone transcription and screenshot OCR remain disabled."],
   ["Is Naukri Apply available now?", "Not yet. Naukri Apply is clearly marked Coming soon. Any planned application count shown with a plan does not become usable until the feature launches."],
   ["Does the website record my system audio?", "Only after you choose a browser tab or screen source with audio. The web preview detects that an audio signal exists; native transcription is demonstrated by the desktop app."],
