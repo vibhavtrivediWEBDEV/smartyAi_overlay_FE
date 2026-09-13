@@ -103,6 +103,16 @@ async function errorMessage(response: Response) {
   }
 }
 
+async function createDemoSession() {
+  const response = await fetch(`${API_BASE_URL}/api/demo/session`, {
+    cache: "no-store",
+    credentials: "include",
+    headers: { "ngrok-skip-browser-warning": "true" },
+  });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return response.json() as Promise<DemoSession>;
+}
+
 export function LiveOverlayDemo() {
   const router = useRouter();
   const [mode, setMode] = useState<"trial" | "api">("trial");
@@ -144,14 +154,7 @@ export function LiveOverlayDemo() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API_BASE_URL}/api/demo/session`, {
-      credentials: "include",
-      headers: { "ngrok-skip-browser-warning": "true" },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(await errorMessage(response));
-        return response.json() as Promise<DemoSession>;
-      })
+    createDemoSession()
       .then((nextSession) => {
         if (!active) return;
         setSession(nextSession);
@@ -222,8 +225,13 @@ export function LiveOverlayDemo() {
     const question = input.trim();
     if (!question || streaming) return;
     if (mode === "trial" && !session) {
-      setStatus("The secure trial is still connecting");
-      return;
+      setStatus("Connecting secure trial...");
+      try {
+        setSession(await createDemoSession());
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "The live demo is unavailable");
+        return;
+      }
     }
     if (mode === "api" && !apiKey.trim()) {
       setStatus("Enter your purchased API key first");
@@ -242,9 +250,8 @@ export function LiveOverlayDemo() {
     const startedAt = performance.now();
 
     try {
-      const response = await fetch(
-        mode === "api" ? `${API_BASE_URL}/v1/chat/completions` : `${API_BASE_URL}/api/demo/chat/completions`,
-        {
+      const requestChat = () => fetch(
+        mode === "api" ? `${API_BASE_URL}/v1/chat/completions` : `${API_BASE_URL}/api/demo/chat/completions`, {
           method: "POST",
           credentials: "include",
           headers: {
@@ -255,6 +262,15 @@ export function LiveOverlayDemo() {
           body: JSON.stringify({ messages: history, stream: true }),
         },
       );
+      let response = await requestChat();
+      if (mode === "trial" && response.status === 401) {
+        setStatus("Reconnecting secure trial...");
+        setSession(await createDemoSession());
+        response = await requestChat();
+      }
+      if (mode === "trial" && response.status === 401) {
+        throw new Error("The secure trial could not connect. Please try Send again.");
+      }
       if (!response.ok || !response.body) {
         if (mode === "trial" && response.status === 429) {
           setSession((current) => current && { ...current, usage: { ...current.usage, used: current.usage.limit, remaining: 0 } });
@@ -394,7 +410,7 @@ export function LiveOverlayDemo() {
           role: "assistant",
           createdAt: new Date().toISOString(),
           content: detected
-            ? "Shared-tab audio was detected. This browser preview verifies the capture path, but it does not transcribe tab audio. The macOS desktop app uses its local Whisper pipeline before sending the approved transcript to GLM-5."
+            ? "Shared-tab audio was detected. This browser preview verifies the capture path, but it does not transcribe tab audio. The macOS desktop app uses its local Whisper pipeline before sending the approved transcript to SmartyAI."
             : "No audible shared-tab signal was detected. Choose a tab with audio enabled, start playback, and try again.",
         }]);
         setStatus(detected ? "Shared-tab audio detected" : "No audible shared-tab signal detected");
@@ -474,7 +490,7 @@ export function LiveOverlayDemo() {
       {!minimized ? <div className="overlay-demo-main">
         <div className="overlay-demo-status">
           <span><i className={listening ? "connected" : ""} /> STT: {listening ? "Listening" : "Ready"}</span>
-          <span><i className={streaming ? "connected" : ""} /> GLM-5: {streaming ? "Streaming" : "Ready"}</span>
+          <span><i className={streaming ? "connected" : ""} /> SmartyAI: {streaming ? "Streaming" : "Ready"}</span>
           <span className={`overlay-demo-latency ${firstTokenMs !== null ? "measured" : ""}`}><i className={streaming || firstTokenMs !== null ? "connected" : ""} />{firstTokenMs === null ? status : `${firstTokenMs}ms first token · ${totalMs === null ? "streaming" : `${(totalMs / 1000).toFixed(2)}s complete`}`}</span>
           <span>{mode === "trial" ? session?.usage.unlimited ? "Build access" : `${session?.usage.remaining ?? "--"}/5 left` : "API key"}</span>
         </div>
@@ -482,7 +498,7 @@ export function LiveOverlayDemo() {
         <div className="overlay-demo-messages" ref={messagesRef} aria-live="polite">
           {visibleMessages.map((message, index) => (
             <div className={`overlay-demo-message ${message.role === "user" ? "user" : ""}`} key={`${message.role}-${index}`}>
-              <div className="overlay-demo-message-header">{message.role === "assistant" ? "GLM-5 Assistant" : "You"}</div>
+              <div className="overlay-demo-message-header">{message.role === "assistant" ? "SmartyAI Assistant" : "You"}</div>
               <div className="overlay-demo-message-text">{message.role === "assistant"
                 ? <AssistantResponse content={message.content || (streaming && index === messages.length - 1 ? "Thinking..." : "")} />
                 : message.content}</div>
