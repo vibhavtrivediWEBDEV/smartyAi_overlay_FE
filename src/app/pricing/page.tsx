@@ -51,7 +51,7 @@ export default async function PricingPage() {
           {[
             ["Clear daily credits", "Every action cost and daily allowance is visible before purchase."],
             ["Verified checkout", "Plan access activates only after server-side Razorpay signature verification."],
-            ["Honest roadmap status", "Naukri Apply is marked Coming soon and is not presented as available today."],
+            ["Application allowances", "The ₹1,999 plan includes 20 Naukri and 10 LinkedIn applications; the ₹9,999 quarterly plan includes unlimited applications on both."],
           ].map(([title, body]) => (
             <article key={title} className="bg-[#11110f] p-6 md:p-8">
               <ShieldCheck size={18} className="text-[#ffae55]" />

@@ -5,7 +5,7 @@ import { PageHeading } from "@/components/dashboard-ui";
 import { API_BASE_URL } from "@/lib/api";
 
 const fileName = "SmartyAI-1.0.7-mac-arm64-internal.dmg";
-const downloadUrl = process.env.NEXT_PUBLIC_MAC_DOWNLOAD_URL || `${API_BASE_URL}/downloads/${encodeURIComponent(fileName)}`;
+const downloadUrl = "https://smartyai-downloads-807857683817.s3.ap-southeast-2.amazonaws.com/SmartyAI-1.0.7-mac-arm64-internal.dmg";
 const windowsFileName = "SmartyAI-Setup-1.0.7-x64.exe";
 const windowsDownloadUrl = process.env.NEXT_PUBLIC_WINDOWS_DOWNLOAD_URL || `${API_BASE_URL}/downloads/${encodeURIComponent(windowsFileName)}`;
 

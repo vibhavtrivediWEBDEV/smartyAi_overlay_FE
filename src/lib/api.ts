@@ -13,6 +13,7 @@ export type Plan = {
   atsResumeLimit: number;
   linkedinApplications: number;
   naukriApplications: number;
+  applicationsUnlimited?: boolean;
   dailyApplicationLimit?: number;
   creditCosts: Record<"chat" | "screenshot" | "microphone" | "system-audio", number>;
 };
@@ -20,9 +21,9 @@ export type Plan = {
 const CREDIT_COSTS: Plan["creditCosts"] = { chat: 2, screenshot: 4, microphone: 2, "system-audio": 2 };
 export const LAUNCH_PLANS: Plan[] = [
   { key: "trial", name: "One-day Trial", price: 10, currency: "INR", durationDays: 1, dailyCreditLimit: 100, description: "Test SmartyAI for one focused interview day.", atsResumeLimit: 1, linkedinApplications: 0, naukriApplications: 0, creditCosts: CREDIT_COSTS },
-  { key: "weekly", name: "Interview Week", price: 499, currency: "INR", durationDays: 7, dailyCreditLimit: 200, description: "Focused preparation and live support for interview week.", atsResumeLimit: 1, linkedinApplications: 50, naukriApplications: 0, creditCosts: CREDIT_COSTS },
-  { key: "monthly", name: "Notice Period", price: 1999, currency: "INR", durationDays: 30, dailyCreditLimit: 500, description: "Daily practice and interview support throughout your notice period.", atsResumeLimit: 10, linkedinApplications: 100, naukriApplications: 20, creditCosts: CREDIT_COSTS },
-  { key: "jobseeker", name: "Job Seeker", price: 9999, currency: "INR", durationDays: 90, dailyCreditLimit: 10000, description: "High-volume preparation and job-search support for active candidates.", atsResumeLimit: 50, linkedinApplications: 1000, naukriApplications: 80, dailyApplicationLimit: 20, creditCosts: CREDIT_COSTS },
+  { key: "weekly", name: "Interview Week", price: 499, currency: "INR", durationDays: 7, dailyCreditLimit: 200, description: "Focused preparation and live support for interview week.", atsResumeLimit: 1, linkedinApplications: 0, naukriApplications: 0, creditCosts: CREDIT_COSTS },
+  { key: "monthly", name: "Notice Period", price: 1999, currency: "INR", durationDays: 30, dailyCreditLimit: 500, description: "Daily practice and interview support throughout your notice period.", atsResumeLimit: 10, linkedinApplications: 10, naukriApplications: 20, creditCosts: CREDIT_COSTS },
+  { key: "jobseeker", name: "Job Seeker", price: 9999, currency: "INR", durationDays: 90, dailyCreditLimit: 10000, description: "High-volume preparation and job-search support for active candidates.", atsResumeLimit: 50, linkedinApplications: 100, naukriApplications: 100, applicationsUnlimited: true, dailyApplicationLimit: 20, creditCosts: CREDIT_COSTS },
 ];
 
 export type Payment = {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, Clock3 } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import type { Plan } from "@/lib/api";
 
 type PricingPlansProps = {
@@ -25,7 +25,8 @@ export function PricingPlans({ plans }: PricingPlansProps) {
             { title: "Capture-protected overlay", detail: "Requests OS capture exclusion; results vary by platform and sharing app" },
             { title: "Custom AI behavior", detail: "Tune behavioral, technical, and response preferences" },
             { title: `${plan.atsResumeLimit} ATS ${plan.atsResumeLimit === 1 ? "improvement" : "improvements"}`, detail: "Optimize against a target job description" },
-            { title: `${plan.linkedinApplications.toLocaleString("en-IN")} LinkedIn job allowance`, detail: plan.linkedinApplications ? "Application automation is being prepared" : "Not included in this plan" },
+            ...(plan.linkedinApplications > 0 ? [{ title: `${plan.applicationsUnlimited ? "Unlimited" : plan.linkedinApplications.toLocaleString("en-IN")} LinkedIn Apply`, detail: "Included in this plan" }] : []),
+            ...(plan.naukriApplications > 0 ? [{ title: `${plan.applicationsUnlimited ? "Unlimited" : plan.naukriApplications.toLocaleString("en-IN")} Naukri Apply`, detail: "Included in this plan" }] : []),
           ];
           return (
             <article key={plan.key} className={`home-pricing-card${featured ? " featured" : ""}`}>
@@ -45,15 +46,6 @@ export function PricingPlans({ plans }: PricingPlansProps) {
                     <span><strong>{feature.title}</strong><small>{feature.detail}</small></span>
                   </div>
                 ))}
-                {plan.naukriApplications > 0 && (
-                  <div className="home-pricing-feature upcoming">
-                    <Clock3 size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Naukri Apply <em>Coming soon</em></strong>
-                      <small>{plan.naukriApplications.toLocaleString("en-IN")} planned applications for this plan after launch</small>
-                    </span>
-                  </div>
-                )}
               </div>
               <Link href={`/register?plan=${plan.key}`} className="home-pricing-cta">Choose {plan.name}<ArrowRight size={15} /></Link>
             </article>
