@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRight, Keyboard, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, DEMO_API_BASE_URL } from "@/lib/api";
 import interviewDemo from "@/content/interview-demo.json";
 import CodeViewer from "@/vendor/code-viewer.js";
 import ResponseParser from "@/vendor/response-parser.js";
@@ -104,7 +104,7 @@ async function errorMessage(response: Response) {
 }
 
 async function createDemoSession() {
-  const response = await fetch(`${API_BASE_URL}/api/demo/session`, {
+  const response = await fetch(`${DEMO_API_BASE_URL}/api/demo/session`, {
     cache: "no-store",
     credentials: "include",
     headers: { "ngrok-skip-browser-warning": "true" },
@@ -206,7 +206,7 @@ export function LiveOverlayDemo() {
   async function reserveCapture(action: "screenshot" | "microphone" | "system-audio") {
     if (mode === "trial" && !session) throw new Error("The secure trial is still connecting");
     if (mode === "api" && !apiKey.trim()) throw new Error("Enter your purchased API key first");
-    const response = await fetch(`${API_BASE_URL}/api/demo/action`, {
+    const response = await fetch(`${DEMO_API_BASE_URL}/api/demo/action`, {
       method: "POST",
       credentials: "include",
       headers: {
@@ -251,7 +251,7 @@ export function LiveOverlayDemo() {
 
     try {
       const requestChat = () => fetch(
-        mode === "api" ? `${API_BASE_URL}/v1/chat/completions` : `${API_BASE_URL}/api/demo/chat/completions`, {
+        mode === "api" ? `${API_BASE_URL}/v1/chat/completions` : `${DEMO_API_BASE_URL}/api/demo/chat/completions`, {
           method: "POST",
           credentials: "include",
           headers: {

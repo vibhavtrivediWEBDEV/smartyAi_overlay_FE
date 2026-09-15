@@ -2,6 +2,10 @@ export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://bhavishya.site"
 ).replace(/\/$/, "");
 
+export const DEMO_API_BASE_URL = API_BASE_URL === "https://bhavishya.site"
+  ? "https://www.bhavishya.site"
+  : API_BASE_URL;
+
 export type Plan = {
   key: string;
   name: string;
