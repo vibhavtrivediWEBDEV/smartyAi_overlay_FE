@@ -264,6 +264,11 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
   }, []);
 
   useEffect(() => {
+    const productStage = overlayRef.current?.closest<HTMLElement>("[data-hero-demo]");
+    if (productStage) productStage.dataset.layout = toolbarLayout;
+  }, [toolbarLayout]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       if (tourResolvedRef.current) return;
       try {

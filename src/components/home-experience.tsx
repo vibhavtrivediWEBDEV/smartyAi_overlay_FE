@@ -64,6 +64,31 @@ export function HomeExperience({ children }: HomeExperienceProps) {
     updateHeader();
     cleanups.push(() => window.removeEventListener("scroll", updateHeader));
 
+    const heroDemo = root.querySelector<HTMLElement>("[data-hero-demo]");
+    const overlayFrame = heroDemo?.querySelector<HTMLElement>(".overlay-demo");
+    const productAxis = heroDemo?.querySelector<HTMLElement>(".home-product-axis");
+    let activeLayout: "vertical" | "horizontal" | undefined;
+    const syncProductLayout = (animate = false) => {
+      if (!heroDemo || !overlayFrame || !productAxis) return;
+      const nextLayout = overlayFrame.classList.contains("overlay-demo-horizontal") ? "horizontal" : "vertical";
+      if (nextLayout === activeLayout) return;
+      activeLayout = nextLayout;
+      heroDemo.dataset.layout = nextLayout;
+      if (!animate || reducedMotion) return;
+
+      const direction = nextLayout === "horizontal" ? -1 : 1;
+      gsap.timeline({ defaults: { overwrite: "auto" } })
+        .fromTo(productAxis, { y: 12 * direction, rotate: 4 * direction }, { y: 0, rotate: 0, duration: 0.7, ease: "elastic.out(1, 0.55)", clearProps: "transform" })
+        .fromTo(overlayFrame.querySelector(".overlay-demo-control-bar"), { scale: 0.965 }, { scale: 1, duration: 0.75, ease: "elastic.out(1, 0.45)", clearProps: "transform" }, 0)
+        .fromTo(overlayFrame.querySelector(".overlay-demo-controls"), { x: nextLayout === "vertical" ? -10 : 0, y: nextLayout === "horizontal" ? -10 : 0 }, { x: 0, y: 0, duration: 0.65, ease: "back.out(2.4)", clearProps: "transform" }, 0.05);
+    };
+    syncProductLayout();
+    if (overlayFrame) {
+      const layoutObserver = new MutationObserver(() => syncProductLayout(true));
+      layoutObserver.observe(overlayFrame, { attributes: true, attributeFilter: ["class"] });
+      cleanups.push(() => layoutObserver.disconnect());
+    }
+
     if (reducedMotion) {
       gsap.set("[data-reveal], [data-hero-copy], [data-hero-actions], [data-hero-proof], [data-hero-demo]", { clearProps: "all" });
       return () => cleanups.forEach((cleanup) => cleanup());
@@ -72,15 +97,43 @@ export function HomeExperience({ children }: HomeExperienceProps) {
     const heroTitle = root.querySelector<HTMLElement>("[data-hero-title]");
     if (heroTitle) {
       split = SplitText.create(heroTitle, { type: "lines,words,chars", mask: "lines" });
-      const hero = gsap.timeline({ delay: 0.38 });
+      const overlayWindow = heroDemo?.querySelector<HTMLElement>(".home-overlay-window");
+      const overlayControls = heroDemo?.querySelectorAll<HTMLElement>(".overlay-demo-controls > *");
+      const overlayStatus = heroDemo?.querySelectorAll<HTMLElement>(".overlay-demo-status > *");
+      const overlayMessages = heroDemo?.querySelectorAll<HTMLElement>(".overlay-demo-message");
+      const overlayComposer = heroDemo?.querySelector<HTMLElement>(".overlay-demo-input-area");
+      const productDetails = heroDemo?.querySelectorAll<HTMLElement>("[data-product-detail]");
+      const overlayWindowTarget = overlayWindow ? [overlayWindow] : [];
+      const overlayFrameTarget = overlayFrame ? [overlayFrame] : [];
+      const overlayComposerTarget = overlayComposer ? [overlayComposer] : [];
+      const hero = gsap.timeline({ delay: 0.38, defaults: { ease: "power4.out" } });
       hero
-        .from(split.lines, { yPercent: 105, duration: 0.8, stagger: 0.08 })
-        .from(split.words, { autoAlpha: 0, yPercent: 28, duration: 0.6, stagger: 0.06 }, "<0.12")
-        .from(split.chars, { autoAlpha: 0, yPercent: 18, duration: 0.4, stagger: 0.008 }, "-=0.48")
+        .from(split.lines, { yPercent: 105, duration: 0.9, stagger: 0.09 })
+        .from(split.words, { autoAlpha: 0, yPercent: 28, duration: 0.65, stagger: 0.06 }, "<0.12")
+        .from(split.chars, { autoAlpha: 0, yPercent: 18, duration: 0.45, stagger: 0.008 }, "-=0.52")
         .from("[data-hero-copy]", { y: 22, autoAlpha: 0, duration: 0.65 }, "-=0.25")
         .from("[data-hero-actions]", { y: 18, autoAlpha: 0, duration: 0.55 }, "-=0.35")
         .from("[data-hero-proof] > *", { y: 16, autoAlpha: 0, stagger: 0.08, duration: 0.5 }, "-=0.25")
-        .from("[data-hero-demo]", { xPercent: 5, scale: 0.965, autoAlpha: 0, duration: 0.9 }, "-=0.7");
+        .from(heroDemo, { xPercent: 7, scale: 0.94, autoAlpha: 0, duration: 1.05 }, "-=0.72")
+        .from(overlayWindowTarget, { rotateX: 8, rotateY: -10, transformPerspective: 1100, duration: 1.15, ease: "expo.out" }, "<")
+        .from(overlayFrameTarget, { clipPath: "inset(0 0 100% 0 round 8px)", duration: 0.85, ease: "expo.inOut" }, "<0.08")
+        .fromTo(productDetails || [], { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.55, stagger: 0.1, immediateRender: false, clearProps: "opacity,visibility" }, "-=0.5")
+        .fromTo(overlayControls || [], { x: -24, scale: 0.4, autoAlpha: 0 }, { x: 0, scale: 1, autoAlpha: 1, duration: 0.72, stagger: 0.035, ease: "elastic.out(1, 0.58)", immediateRender: false, clearProps: "transform,opacity,visibility" }, "-=0.42")
+        .fromTo(overlayStatus || [], { y: -10, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.45, stagger: 0.055, immediateRender: false, clearProps: "transform,opacity,visibility" }, "-=0.5")
+        .fromTo(overlayMessages || [], { y: 28, scale: 0.97, autoAlpha: 0 }, { y: 0, scale: 1, autoAlpha: 1, duration: 0.65, stagger: 0.1, immediateRender: false, clearProps: "transform,opacity,visibility" }, "-=0.36")
+        .fromTo(overlayComposerTarget, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.55, immediateRender: false, clearProps: "transform,opacity,visibility" }, "-=0.42");
+    }
+
+    const productScan = heroDemo?.querySelector<HTMLElement>("[data-product-scan]");
+    if (productScan) {
+      gsap.fromTo(productScan, { yPercent: -120, autoAlpha: 0 }, {
+        yPercent: 900,
+        autoAlpha: 0.65,
+        duration: 4.2,
+        repeat: -1,
+        repeatDelay: 1.4,
+        ease: "none",
+      });
     }
 
     gsap.to("[data-hero-monogram]", {
@@ -111,6 +164,21 @@ export function HomeExperience({ children }: HomeExperienceProps) {
       });
     });
 
+    const sectionSplits = gsap.utils.toArray<HTMLElement>("[data-reveal] .display-type, [data-journey-stage] .display-type").map((heading) => {
+      const headingSplit = SplitText.create(heading, { type: "lines,words", mask: "lines" });
+      gsap.from(headingSplit.words, {
+        yPercent: 105,
+        rotate: 2,
+        autoAlpha: 0,
+        duration: 0.8,
+        stagger: 0.035,
+        ease: "power4.out",
+        scrollTrigger: { trigger: heading, start: "top 86%", toggleActions: "play none none reverse" },
+      });
+      return headingSplit;
+    });
+    cleanups.push(() => sectionSplits.forEach((headingSplit) => headingSplit.revert()));
+
     const media = gsap.matchMedia();
     media.add("(min-width: 1024px)", () => {
       const cards = gsap.utils.toArray<HTMLElement>("[data-journey-card]");
@@ -137,6 +205,56 @@ export function HomeExperience({ children }: HomeExperienceProps) {
     cleanups.push(() => media.revert());
 
     if (finePointer) {
+      const overlayWindow = heroDemo?.querySelector<HTMLElement>(".home-overlay-window");
+      if (heroDemo && overlayWindow) {
+        const moveOverlay = (event: PointerEvent) => {
+          const bounds = heroDemo.getBoundingClientRect();
+          gsap.to(overlayWindow, {
+            rotateX: ((event.clientY - bounds.top) / bounds.height - 0.5) * -3.2,
+            rotateY: ((event.clientX - bounds.left) / bounds.width - 0.5) * 4.2,
+            duration: 0.65,
+            ease: "power3.out",
+            overwrite: "auto",
+          });
+        };
+        const resetOverlay = () => {
+          gsap.to(overlayWindow, { rotateX: 0, rotateY: 0, duration: 0.65, ease: "power3.out", overwrite: "auto" });
+        };
+        heroDemo.addEventListener("pointermove", moveOverlay);
+        heroDemo.addEventListener("pointerleave", resetOverlay);
+        cleanups.push(() => {
+          heroDemo.removeEventListener("pointermove", moveOverlay);
+          heroDemo.removeEventListener("pointerleave", resetOverlay);
+        });
+      }
+
+      const overlayControls = heroDemo?.querySelector<HTMLElement>(".overlay-demo-controls");
+      if (overlayControls) {
+        const animateControl = (event: PointerEvent, scale: number) => {
+          const control = (event.target as Element).closest<HTMLElement>("button, label");
+          if (!control || !overlayControls.contains(control)) return;
+          gsap.to(control, {
+            scale,
+            duration: scale > 1 ? 0.22 : 0.7,
+            ease: scale > 1 ? "power3.out" : "elastic.out(1, 0.45)",
+            overwrite: "auto",
+            ...(scale === 1 ? { clearProps: "transform" } : {}),
+          });
+        };
+        const enterControl = (event: PointerEvent) => animateControl(event, 1.12);
+        const leaveControl = (event: PointerEvent) => {
+          const control = (event.target as Element).closest<HTMLElement>("button, label");
+          if (control?.contains(event.relatedTarget as Node | null)) return;
+          animateControl(event, 1);
+        };
+        overlayControls.addEventListener("pointerover", enterControl);
+        overlayControls.addEventListener("pointerout", leaveControl);
+        cleanups.push(() => {
+          overlayControls.removeEventListener("pointerover", enterControl);
+          overlayControls.removeEventListener("pointerout", leaveControl);
+        });
+      }
+
       const cursor = root.querySelector<HTMLElement>("[data-cursor]");
       const cursorLabel = cursor?.querySelector<HTMLElement>("span");
       if (cursor) {

@@ -152,7 +152,7 @@ export default async function Home() {
               </Link>
             </div>
             <p className="mt-3 text-xs font-semibold text-[#b9b1a4]">50 AI messages · one-time payment · no auto-renewal</p>
-            <p className="mt-5 text-xs leading-5 text-[#817b70]">
+            <p data-hero-disclosure className="mt-5 text-xs leading-5 text-[#817b70]">
               The web preview uses typed or user-approved demo inputs. Desktop
               capture requires permission; overlay exclusion varies by OS and sharing app.
             </p>
@@ -163,7 +163,21 @@ export default async function Home() {
             </div>
           </div>
 
-          <div id="live-demo" data-hero-demo data-cursor-label="TRY" className="relative min-w-0" aria-label="Interactive SmartyAI web preview">
+          <div id="live-demo" data-hero-demo data-layout="vertical" data-cursor-label="TRY" className="relative min-w-0" aria-label="Interactive SmartyAI web preview">
+            <div data-product-detail className="home-product-telemetry" aria-hidden="true">
+              <span>Product / 01</span>
+              <i />
+              <span>Live</span>
+            </div>
+            <div data-product-detail className="home-product-axis" aria-hidden="true">
+              <span>Vertical mode</span>
+              <span>Horizontal mode</span>
+            </div>
+            <div data-product-detail className="home-product-index" aria-hidden="true">
+              <span data-product-mode="vertical">V / 01</span>
+              <span data-product-mode="horizontal">H / 02</span>
+            </div>
+            <i data-product-scan className="home-product-scan" aria-hidden="true" />
             <div className="home-overlay-window">
               <LiveOverlayDemo verticalToolbar />
             </div>
