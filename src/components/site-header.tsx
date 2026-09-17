@@ -26,7 +26,7 @@ const links = [
   ["Downloads", "/downloads"],
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ immersive = false }: { immersive?: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="luxury-site-header border-b border-white/10 bg-[#0b0b0a]/95 text-paper backdrop-blur">
+    <header data-site-header className={`luxury-site-header${immersive ? " luxury-site-header-immersive" : ""} border-b border-white/10 bg-[#0b0b0a]/95 text-paper backdrop-blur`}>
       <div className="mx-auto flex h-18 max-w-360 items-center justify-between px-5 md:px-10">
         <Link href="/" className="display-type text-2xl font-bold tracking-normal">
           Smarty<span className="text-gold">AI</span>

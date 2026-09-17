@@ -1,5 +1,5 @@
 export const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://bhavishya.site"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://www.bhavishya.site"
 ).replace(/\/$/, "");
 
 export const DEMO_API_BASE_URL = API_BASE_URL === "https://bhavishya.site"
@@ -45,6 +45,8 @@ export type Account = {
   email: string;
   name: string;
   plan: string;
+  planExpiresAt: string | null;
+  trialPurchased: boolean;
   apiKey: string | null;
   payment?: Payment;
   creditsUsed: number;
@@ -80,6 +82,8 @@ export function normalizeAccount(account: Partial<Account>): Account {
     email: account.email || "",
     name: account.name || "",
     plan: account.plan || plan.key,
+    planExpiresAt: account.planExpiresAt || null,
+    trialPurchased: account.trialPurchased === true,
     apiKey: account.apiKey || null,
     payment: account.payment,
     creditsUsed,

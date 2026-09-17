@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { getPlans } from "@/lib/api";
+import { HomeExperience } from "@/components/home-experience";
 import { LiveOverlayDemo } from "@/components/live-overlay-demo";
 import { PricingPlans } from "@/components/pricing-plans";
 import { SiteFooter } from "@/components/site-footer";
@@ -102,37 +103,40 @@ export default async function Home() {
   };
 
   return (
+    <HomeExperience>
     <main className="grain overflow-hidden bg-ink text-paper">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <section className="hero-grid home-hero relative min-h-[92svh] border-b border-white/10">
+      <section data-home-hero className="hero-grid home-hero relative min-h-[92svh] border-b border-white/10">
         <div className="home-hero-glow absolute inset-0" />
-        <div className="home-hero-monogram" aria-hidden="true">S</div>
+        <div data-hero-monogram className="home-hero-monogram" aria-hidden="true">S</div>
         <div className="home-hero-coordinate" aria-hidden="true">PRIVATE INTELLIGENCE / 01</div>
         <div className="relative z-10">
-          <SiteHeader />
+          <SiteHeader immersive />
         </div>
 
         <div className="relative z-1 mx-auto grid min-h-[calc(92svh-5rem)] max-w-[1540px] items-center gap-10 px-5 pb-12 pt-8 md:px-10 lg:grid-cols-[.72fr_1.28fr] lg:gap-12 lg:pb-16">
-          <div className="reveal max-w-xl">
+          <div className="reveal min-w-0 max-w-xl">
             <p className="mb-5 flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-[#ffae55]">
               <Sparkles size={14} /> Private conversation intelligence
             </p>
-            <h1 className="display-type text-[clamp(3.25rem,6.5vw,6.8rem)] font-semibold leading-[.84] tracking-normal text-white">
+            <h1 data-hero-title className="display-type text-[clamp(3.25rem,6.5vw,6.8rem)] font-semibold leading-[.84] tracking-normal text-white">
               SmartyAI.
               <br />
               <span className="italic text-[#ffae55]">Own the moment.</span>
             </h1>
-            <p className="mt-7 max-w-lg text-base leading-7 text-[#c8c2b8] md:text-lg">
+            <p data-hero-copy className="mt-7 max-w-lg text-base leading-7 text-[#c8c2b8] md:text-lg">
               A desktop assistant for interviews and important conversations.
               Ground answers in your resume and job description, control capture
               explicitly, and keep streamed guidance in a compact overlay.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
+            <div data-hero-actions className="mt-9 flex flex-wrap gap-3">
               <Link
                 href="/register?plan=trial"
+                data-magnetic
+                data-cursor-label="START"
                 className="flex items-center gap-2 rounded-md bg-[#ffae55] px-5 py-3 text-sm font-bold text-black transition hover:bg-[#ffc47f]"
               >
                 Start 1-day trial · ₹10 <ArrowRight size={16} />
@@ -140,6 +144,8 @@ export default async function Home() {
               <Link
 
                 href="#live-demo"
+                data-magnetic
+                data-cursor-label="EXPLORE"
                 className="rounded-md border border-white/25 px-5 py-3 text-sm font-bold text-white transition hover:border-[#ffae55]"
               >
                 Try the live preview
@@ -150,21 +156,23 @@ export default async function Home() {
               The web preview uses typed or user-approved demo inputs. Desktop
               capture requires permission; overlay exclusion varies by OS and sharing app.
             </p>
-            <div className="home-hero-proof">
+            <div data-hero-proof className="home-hero-proof">
               <div><span>Response</span><strong>Measured live</strong><small>First-token + completion timing</small></div>
               <div><span>Context</span><strong>User approved</strong><small>Resume · JD · audio · screen</small></div>
               <div><span>Privacy</span><strong>Local-first tools</strong><small>Encrypted context · explicit capture</small></div>
             </div>
           </div>
 
-          <div id="live-demo" className="reveal reveal-late relative min-w-0" aria-label="Interactive SmartyAI web preview">
-            <LiveOverlayDemo />
+          <div id="live-demo" data-hero-demo data-cursor-label="TRY" className="relative min-w-0" aria-label="Interactive SmartyAI web preview">
+            <div className="home-overlay-window">
+              <LiveOverlayDemo verticalToolbar />
+            </div>
           </div>
         </div>
       </section>
 
       <section className="home-capability-band border-b border-white/10">
-        <div className="mx-auto grid max-w-360 grid-cols-2 md:grid-cols-4">
+        <div data-reveal-group className="mx-auto grid max-w-360 grid-cols-2 md:grid-cols-4">
           {capabilities.map((item) => (
             <div
               key={item}
@@ -178,7 +186,7 @@ export default async function Home() {
       </section>
 
       <section className="home-journey-section px-5 py-24 md:px-10 md:py-32">
-        <div className="relative z-1 mx-auto max-w-360">
+        <div data-journey-stage className="relative z-1 mx-auto max-w-360">
           <div className="grid gap-8 lg:grid-cols-[.7fr_1.3fr] lg:items-end">
             <div>
               <p className="home-section-kicker text-xs font-bold uppercase tracking-[.16em]">One continuous workflow</p>
@@ -186,20 +194,21 @@ export default async function Home() {
             </div>
             <p className="home-journey-copy max-w-2xl text-base leading-7 lg:justify-self-end">SmartyAI is built around the moments before, during, and after a consequential conversation. Each input is explicit, each answer stays visible in one compact workspace, and every capture can be stopped by the user.</p>
           </div>
-          <div className="home-journey-grid mt-14 grid sm:grid-cols-2 lg:grid-cols-3">
-            {journey.map(({ icon: Icon, label, title, body }) => <article key={label} className="home-journey-card min-h-64 p-6 md:p-8">
+          <div className="home-journey-viewport">
+          <div className="home-journey-grid home-journey-track mt-14">
+            {journey.map(({ icon: Icon, label, title, body }) => <article data-journey-card key={label} className="home-journey-card min-h-64 p-6 md:p-8">
               <div className="flex items-center justify-between"><span className="font-mono text-xs">{label}</span><Icon size={21} /></div>
               <h3 className="display-type mt-12 text-2xl font-semibold tracking-normal">{title}</h3>
               <p className="mt-3 max-w-sm text-sm leading-6">{body}</p>
             </article>)}
-          </div>
+          </div></div>
         </div>
       </section>
 
-      <section className="border-y border-white/10 bg-[#0b0c0d] px-5 py-24 md:px-10 md:py-32">
+      <section data-code-section className="home-code-section border-y border-white/10 bg-[#0b0c0d] px-5 py-24 md:px-10 md:py-32">
         <div className="mx-auto max-w-360">
           <div className="grid gap-12 lg:grid-cols-2">
-            <div>
+            <div data-reveal>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-gold">Technical conversations</p>
               <h2 className="display-type mt-4 text-5xl font-semibold leading-none tracking-normal">Code without losing the question.</h2>
               <p className="mt-6 max-w-xl text-base leading-7 text-[#aaa397]">Keep the discussion, constraints, and response together. The overlay renders code separately from prose, preserves long lines with internal scrolling, and offers a copy action without widening the window.</p>
@@ -207,7 +216,7 @@ export default async function Home() {
                 {["System design follow-ups", "Behavioral story structure", "JavaScript and backend code", "Resume-grounded examples"].map((item) => <div key={item} className="flex items-center gap-3 bg-[#111210] p-4 text-sm text-[#ddd7cc]"><Check size={15} className="text-[#63e6a4]" />{item}</div>)}
               </div>
             </div>
-            <div className="self-end border border-white/10 bg-[#070809] p-3">
+            <div data-code-panel className="self-end border border-white/10 bg-[#070809] p-3">
               <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 font-mono text-[11px] text-white/45"><span>javascript</span><span>Copy</span></div>
               <pre className="overflow-x-auto p-5 font-mono text-xs leading-6 text-[#b9d7ff]"><code>{`async function answer(context, question) {\n  const evidence = selectRelevantExperience(context);\n  return streamGroundedResponse({ question, evidence });\n}`}</code></pre>
             </div>
@@ -215,8 +224,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-360 px-5 py-24 md:px-10 md:py-32">
-        <div className="grid gap-10 lg:grid-cols-[.8fr_1.2fr]">
+      <section className="home-consent-section mx-auto max-w-360 px-5 py-24 md:px-10 md:py-32">
+        <div data-reveal className="grid gap-10 lg:grid-cols-[.8fr_1.2fr]">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.16em] text-gold">
               Designed around consent
@@ -259,7 +268,7 @@ export default async function Home() {
 
       <section id="comparison" className="comparison-section border-y border-white/10 px-5 py-24 md:px-10 md:py-32">
         <div className="mx-auto max-w-360">
-          <div className="comparison-intro">
+          <div data-reveal className="comparison-intro">
             <div>
               <p className="comparison-kicker">Product comparison <span>Official-site research</span></p>
               <h2 className="display-type mt-5 max-w-4xl text-5xl font-semibold leading-[.92] tracking-normal md:text-7xl">Speed you can test.<br /><span>Details you can trust.</span></h2>
@@ -272,7 +281,7 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="comparison-vendor-strip" aria-label="Products included in the comparison">
+          <div data-reveal-group className="comparison-vendor-strip" aria-label="Products included in the comparison">
             {comparisons.map((product) => (
               <article key={product.name} className={product.featured ? "featured" : ""}>
                 <span>{product.featured ? "Our product" : "Official source"}</span>
@@ -282,7 +291,7 @@ export default async function Home() {
             ))}
           </div>
 
-          <div className="home-table-wrap">
+          <div data-reveal className="home-table-wrap">
             <table className="home-data-table">
               <thead>
                 <tr>
@@ -310,7 +319,7 @@ export default async function Home() {
 
       <section id="pricing" className="home-pricing-section border-y border-white/10 px-5 py-24 md:px-10 md:py-32">
         <div className="mx-auto max-w-360">
-          <div className="home-pricing-heading">
+          <div data-reveal className="home-pricing-heading">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-gold">
                 Plans from the SmartyAI service
@@ -322,6 +331,7 @@ export default async function Home() {
             </div>
             <Link
               href="/pricing"
+              data-magnetic
               className="home-pricing-details-link"
             >
               Compare plan details <ArrowRight size={15} />
@@ -332,7 +342,7 @@ export default async function Home() {
       </section>
 
       <section className="home-faq-section px-5 py-24 md:px-10 md:py-32">
-        <div className="relative z-1 mx-auto grid max-w-360 gap-12 lg:grid-cols-[.7fr_1.3fr]">
+        <div data-reveal className="relative z-1 mx-auto grid max-w-360 gap-12 lg:grid-cols-[.7fr_1.3fr]">
           <div>
             <p className="home-section-kicker text-xs font-bold uppercase tracking-[.16em]">Straight answers</p>
             <h2 className="display-type mt-4 text-5xl font-semibold leading-none tracking-normal md:text-7xl">Privacy, limits, and platform truth.</h2>
@@ -346,13 +356,14 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="border-t border-white/10 px-5 py-24 md:px-10 md:py-32">
-        <div className="mx-auto flex max-w-360 flex-col justify-between gap-8 lg:flex-row lg:items-end">
+      <section className="home-final-cta border-t border-white/10 px-5 py-24 md:px-10 md:py-32">
+        <div data-reveal className="mx-auto flex max-w-360 flex-col justify-between gap-8 lg:flex-row lg:items-end">
           <h2 className="display-type max-w-4xl text-5xl font-semibold leading-[.95] tracking-normal md:text-7xl">Prepare with context. Stay present in the conversation.</h2>
-          <Link href="/downloads" className="flex w-fit items-center gap-2 rounded-md bg-[#ffae55] px-6 py-4 text-sm font-bold text-black transition hover:bg-[#ffc47f]">Download SmartyAI <ArrowRight size={16} /></Link>
+          <Link href="/downloads" data-magnetic data-cursor-label="DOWNLOAD" className="flex w-fit items-center gap-2 rounded-md bg-[#ffae55] px-6 py-4 text-sm font-bold text-black transition hover:bg-[#ffc47f]">Download SmartyAI <ArrowRight size={16} /></Link>
         </div>
       </section>
       <SiteFooter />
     </main>
+    </HomeExperience>
   );
 }
