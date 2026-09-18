@@ -151,7 +151,7 @@ export default async function Home() {
                 Try the live preview
               </Link>
             </div>
-            <p className="mt-3 text-xs font-semibold text-[#b9b1a4]">50 AI messages · one-time payment · no auto-renewal</p>
+            <p data-hero-promo className="mt-3 text-xs font-semibold text-[#b9b1a4]">50 AI messages · one-time payment · no auto-renewal</p>
             <p data-hero-disclosure className="mt-5 text-xs leading-5 text-[#817b70]">
               The web preview uses typed or user-approved demo inputs. Desktop
               capture requires permission; overlay exclusion varies by OS and sharing app.
