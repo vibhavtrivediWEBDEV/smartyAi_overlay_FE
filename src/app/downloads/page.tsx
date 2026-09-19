@@ -9,9 +9,9 @@ import { API_BASE_URL } from "@/lib/api";
 export const metadata: Metadata = { title: "Download SmartyAI for Mac", description: "Download SmartyAI 1.0.7 for Apple Silicon Macs and follow the guided installation steps.", alternates: { canonical: "/downloads" } };
 
 const fileName = "SmartyAI-1.0.7-mac-arm64-internal.dmg";
-const downloadUrl = "https://smartyai-downloads-807857683817.s3.ap-southeast-2.amazonaws.com/SmartyAI-1.0.7-mac-arm64-internal.dmg";
+const downloadUrl = "https://smartyai-downloads-807857683817.s3.ap-southeast-2.amazonaws.com/SmartyAI-1.0.9-mac-arm64-internal.dmg";
 const windowsFileName = "SmartyAI-Setup-1.0.7-x64.exe";
-const windowsDownloadUrl = `${API_BASE_URL}/api/downloads/latest/windows`;
+const windowsDownloadUrl = `https://smartyai-downloads-807857683817.s3.ap-southeast-2.amazonaws.com/SmartyAI-Setup-1.0.9-x64.exe`;
 const quarantineCommand = "xattr -dr com.apple.quarantine /Applications/SmartyAI.app";
 const openCommand = "open /Applications/SmartyAI.app";
 

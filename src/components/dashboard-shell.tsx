@@ -7,7 +7,7 @@ import { Activity, ContactRound, CreditCard, Download, FileKey, FilePenLine, Lay
 import { useAuth } from "./auth-provider";
 
 const nav = [
-  ["Overview", "/dashboard", LayoutDashboard], ["My plan", "/dashboard/plan", CreditCard], ["Usage", "/dashboard/usage", Activity], ["API key", "/dashboard/api-key", FileKey], ["Billing", "/dashboard/billing", ReceiptText], ["User profile", "/dashboard/context", ContactRound], ["Resume builder", "/dashboard/resume-builder", FilePenLine], ["Downloads", "/dashboard/downloads", Download], ["Account", "/dashboard/account", UserRound],
+  ["Overview", "/dashboard", LayoutDashboard], ["My plan", "/dashboard/plan", CreditCard], ["Response Studio", "/dashboard/response-studio", Activity], ["Usage", "/dashboard/usage", Activity], ["API key", "/dashboard/api-key", FileKey], ["Billing", "/dashboard/billing", ReceiptText], ["User profile", "/dashboard/context", ContactRound], ["Resume builder", "/dashboard/resume-builder", FilePenLine], ["Downloads", "/dashboard/downloads", Download], ["Account", "/dashboard/account", UserRound],
 ] as const;
 const adminNav = [
   ["Payments", "/dashboard/admin", ReceiptText], ["Users", "/dashboard/admin/users", UsersRound], ["Usage", "/dashboard/admin/usage", Activity],
