@@ -59,6 +59,25 @@ body {
   top: 0 !important;
 }
 
+.studio-input {
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(0 0 0 / 0.32);
+  padding: 0.75rem 0.875rem;
+  color: var(--paper);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.studio-input:focus {
+  border-color: rgb(230 197 122 / 0.7);
+}
+
+.studio-input option {
+  background: #12120f;
+  color: var(--paper);
+}
+
 ::selection {
   background: var(--gold);
   color: var(--ink);

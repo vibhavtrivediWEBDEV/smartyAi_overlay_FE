@@ -1,0 +1,256 @@
+/**
+ * Diagram Viewer — SmartyAI Mermaid rendering component
+ * Matches the existing dark glassmorphism aesthetic.
+ * Safe: renders Mermaid-generated SVG without executing script.
+ */
+
+.diagram-viewer {
+    margin: 14px 0;
+    border: 1px solid rgba(201, 162, 75, 0.18);
+    border-radius: 10px;
+    background: #0d0d0f;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+    overflow: hidden;
+    position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.diagram-viewer.incomplete {
+    border-color: rgba(201, 162, 75, 0.48);
+}
+
+.diagram-viewer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 0 10px 0 14px;
+    border-bottom: 1px solid rgba(237, 234, 227, 0.065);
+    background: #151417;
+    gap: 6px;
+}
+
+.diagram-type-label {
+    color: rgba(237, 234, 227, 0.5);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+}
+
+.diagram-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagram-toolbar-btn {
+    background: transparent;
+    border: 1px solid rgba(201, 162, 75, 0.3);
+    color: rgba(237, 234, 227, 0.7);
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.diagram-toolbar-btn:hover {
+    background: rgba(201, 162, 75, 0.12);
+    color: #ffd166;
+    border-color: rgba(201, 162, 75, 0.6);
+}
+
+.diagram-toolbar-btn:active {
+    transform: translateY(1px);
+}
+
+.diagram-toolbar-btn.copied {
+    color: #7ee787;
+    border-color: rgba(126, 231, 135, 0.5);
+}
+
+.diagram-zoom-level {
+    color: rgba(237, 234, 227, 0.6);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    background: rgba(201, 162, 75, 0.1);
+    border-radius: 4px;
+    min-width: 42px;
+    text-align: center;
+}
+
+.diagram-container {
+    position: relative;
+    min-height: 120px;
+    max-height: 480px;
+    overflow: auto;
+    background: #0d0d0f;
+    transition: max-height 0.25s ease;
+    cursor: grab;
+}
+
+.diagram-container:active {
+    cursor: grabbing;
+}
+
+.diagram-container.fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    max-height: none;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.diagram-container.fullscreen .diagram-svg-wrapper {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.diagram-svg-wrapper {
+    padding: 16px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+/* Mermaid default styling overrides for dark theme */
+.diagram-svg-wrapper svg {
+    max-width: 100%;
+    height: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif !important;
+}
+
+/* Dark-themed nodes (flowchart, class, etc.) */
+.diagram-svg-wrapper .node rect,
+.diagram-svg-wrapper .node circle,
+.diagram-svg-wrapper .node ellipse,
+.diagram-svg-wrapper .node polygon,
+.diagram-svg-wrapper .node path,
+.diagram-svg-wrapper .cluster rect,
+.diagram-svg-wrapper .cluster circle,
+.diagram-svg-wrapper .cluster ellipse,
+.diagram-svg-wrapper .cluster polygon,
+.diagram-svg-wrapper .cluster path {
+    fill: #1a1a1d !important;
+    stroke: rgba(201, 162, 75, 0.4) !important;
+}
+
+.diagram-svg-wrapper .node .label,
+.diagram-svg-wrapper .nodeLabel,
+.diagram-svg-wrapper .cluster .label,
+.diagram-svg-wrapper .clusterLabel {
+    color: rgba(237, 234, 227, 0.9) !important;
+}
+
+.diagram-svg-wrapper text,
+.diagram-svg-wrapper .nodeLabel,
+.diagram-svg-wrapper .label {
+    fill: rgba(237, 234, 227, 0.95) !important;
+    color: rgba(237, 234, 227, 0.95) !important;
+}
+
+.diagram-svg-wrapper text.actor,
+.diagram-svg-wrapper text.actorText,
+.diagram-svg-wrapper text.label,
+.diagram-svg-wrapper text.title {
+    fill: rgba(237, 234, 227, 0.95) !important;
+}
+
+.diagram-svg-wrapper .edgePath .path,
+.diagram-svg-wrapper .path {
+    stroke: rgba(201, 162, 75, 0.6) !important;
+}
+
+.diagram-svg-wrapper .edgeLabel,
+.diagram-svg-wrapper .edgeLabel rect,
+.diagram-svg-wrapper .edgeLabel background {
+    fill: #151417 !important;
+    color: rgba(237, 234, 227, 0.8) !important;
+}
+
+/* Sequence diagram actors */
+.diagram-svg-wrapper .actor {
+    fill: #1a1a1d !important;
+    stroke: rgba(201, 162, 75, 0.4) !important;
+}
+
+.diagram-svg-wrapper text.actor,
+.diagram-svg-wrapper text.actorText {
+    fill: rgba(237, 234, 227, 0.9) !important;
+}
+
+.diagram-svg-wrapper .activation,
+.diagram-svg-wrapper .loopLine,
+.diagram-svg-wrapper .sequenceNumber {
+    fill: rgba(201, 162, 75, 0.25) !important;
+    stroke: rgba(201, 162, 75, 0.4) !important;
+}
+
+/* Loading state */
+.diagram-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    color: rgba(237, 234, 227, 0.5);
+    font-size: 13px;
+    padding: 24px;
+}
+
+.diagram-loading::after {
+    content: " Rendering diagram…";
+}
+
+/* Empty state */
+.diagram-empty {
+    color: rgba(237, 234, 227, 0.4);
+    font-size: 13px;
+    padding: 24px;
+    text-align: center;
+}
+
+/* Error state */
+.diagram-error {
+    color: #f97583;
+    border: 1px solid rgba(249, 117, 131, 0.4);
+    background: rgba(249, 117, 131, 0.06);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12px;
+    margin: 14px;
+    overflow-wrap: break-word;
+}
+
+.diagram-error:before {
+    content: "⚠️ ";
+}
+
+/* Close button for fullscreen */
+.diagram-fullscreen-close {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(201, 162, 75, 0.4);
+    color: rgba(237, 234, 227, 0.9);
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 6px 14px;
+    cursor: pointer;
+}
+
+.diagram-fullscreen-close:hover {
+    background: rgba(201, 162, 75, 0.2);
+    color: #ffd166;
+}

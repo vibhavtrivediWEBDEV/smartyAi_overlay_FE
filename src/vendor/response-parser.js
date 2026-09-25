@@ -33,16 +33,23 @@ function parseAIResponse(text) {
       });
     }
     
-    // Add the code block
     const language = match[1] || detectLanguage(match[2]) || '';
     const codeContent = match[2].trim();
     
     if (codeContent) {
-      blocks.push({
-        type: 'code',
-        content: codeContent, // Preserve raw code content
-        language: language
-      });
+      if (language === 'mermaid' || /^(graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitGraph)/m.test(codeContent)) {
+        blocks.push({
+          type: 'mermaid',
+          content: codeContent,
+          language: 'mermaid'
+        });
+      } else {
+        blocks.push({
+          type: 'code',
+          content: codeContent,
+          language: language
+        });
+      }
     }
     
     lastIndex = match.index + match[0].length;
@@ -272,6 +279,14 @@ function processMarkdown(text) {
   processed = processed.replace(/<h2>([^<]+)<\/h2>/gi, '## $1\n');
   processed = processed.replace(/<h3>([^<]+)<\/h3>/gi, '### $1\n');
   
+  processed = processed.replace(/<header>([^<]*)<\/header>/gi, '\n---\n$1\n---\n');
+  processed = processed.replace(/<footer>([^<]*)<\/footer>/gi, '\n---\n$1\n---\n');
+  processed = processed.replace(/<section>([^<]*)<\/section>/gi, '\n\n$1\n\n');
+  processed = processed.replace(/<article>([^<]*)<\/article>/gi, '\n\n$1\n\n');
+  processed = processed.replace(/<main>([^<]*)<\/main>/gi, '\n\n$1\n\n');
+  processed = processed.replace(/<nav>([^<]*)<\/nav>/gi, '\n$1\n');
+  processed = processed.replace(/<aside>([^<]*)<\/aside>/gi, '\n> $1\n');
+
   // STEP 2: Remove ALL remaining HTML tags (XSS prevention)
   processed = processed.replace(/<[^>]+>/g, '');
   

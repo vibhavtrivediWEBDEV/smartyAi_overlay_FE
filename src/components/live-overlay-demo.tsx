@@ -33,6 +33,8 @@ import { API_BASE_URL, DEMO_API_BASE_URL } from "@/lib/api";
 import interviewDemo from "@/content/interview-demo.json";
 import CodeViewer from "@/vendor/code-viewer.js";
 import ResponseParser from "@/vendor/response-parser.js";
+import DiagramViewer from "@/vendor/diagram-viewer.js";
+import mermaid from "mermaid";
 
 type DemoUsage = {
   limit: number;
@@ -143,10 +145,39 @@ function SharedCodeViewer({ content, language, incomplete }: { content: string; 
   return <div ref={mountRef} />;
 }
 
+function SharedDiagramViewer({ content }: { content: string }) {
+  const mountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    const mermaidWindow = window as Window & { mermaid?: typeof mermaid };
+    mermaidWindow.mermaid = mermaid;
+    if (!document.querySelector('link[data-smartyai-diagram-styles]')) {
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = "/diagram-viewer.css";
+      stylesheet.dataset.smartyaiDiagramStyles = "true";
+      document.head.appendChild(stylesheet);
+    }
+    const viewer = new DiagramViewer();
+    mount.replaceChildren(viewer.render(content));
+    return () => mount.replaceChildren();
+  }, [content]);
+
+  return <div ref={mountRef} />;
+}
+
 function AssistantResponse({ content }: { content: string }) {
-  return <>{ResponseParser.parseAIResponse(content).map((block, index) => block.type === "code"
-    ? <SharedCodeViewer key={index} content={block.content} language={block.language} incomplete={block.incomplete} />
-    : <ResponseText key={index} content={block.content} />)}</>;
+  return <>{ResponseParser.parseAIResponse(content).map((block, index) => {
+    if (block.type === "mermaid") {
+      return <SharedDiagramViewer key={index} content={block.content} />;
+    }
+    if (block.type === "code") {
+      return <SharedCodeViewer key={index} content={block.content} language={block.language} incomplete={block.incomplete} />;
+    }
+    return <ResponseText key={index} content={block.content} />;
+  })}</>;
 }
 
 function localTime(value?: string) {
