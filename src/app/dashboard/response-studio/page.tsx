@@ -29,11 +29,15 @@ const tabs: { id: Tab; title: string; icon: typeof Sparkles }[] = [
 
 function matchingExample(question: string, examples: Example[]) {
   const aliases: Record<string, string> = { exp: "experience", yrs: "years", yr: "year", dev: "developer", proj: "project" };
-  const terms = new Set((question.toLowerCase().match(/[a-z0-9]{3,}/g) || []).map(term => aliases[term] || term));
+  const ignored = new Set(["a", "an", "and", "about", "are", "can", "did", "do", "for", "how", "i", "is", "me", "my", "of", "the", "tell", "that", "to", "was", "what", "when", "where", "why", "with", "you", "your"]);
+  const terms = (value: string) => [...new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) || []).map(term => aliases[term] || term).filter(term => !ignored.has(term)))];
+  const questionTerms = terms(question);
   return examples
     .map(example => {
-      const exampleTerms = (example.question.toLowerCase().match(/[a-z0-9]{3,}/g) || []).map(term => aliases[term] || term);
-      return { example, score: exampleTerms.filter(term => terms.has(term)).length };
+      const exampleTerms = terms(example.question);
+      const overlap = questionTerms.filter(term => exampleTerms.includes(term)).length;
+      const matches = questionTerms.join(" ") === exampleTerms.join(" ") || (questionTerms.length === 1 && exampleTerms.includes(questionTerms[0])) || (overlap >= 2 && overlap / questionTerms.length >= 0.5);
+      return { example, score: matches ? 1 : 0 };
     })
     .filter(({ score }) => score > 0)
     .sort((left, right) => right.score - left.score)[0]?.example;
