@@ -27,6 +27,18 @@ const tabs: { id: Tab; title: string; icon: typeof Sparkles }[] = [
   { id: "library", title: "Library & history", icon: History },
 ];
 
+function matchingExample(question: string, examples: Example[]) {
+  const aliases: Record<string, string> = { exp: "experience", yrs: "years", yr: "year", dev: "developer", proj: "project" };
+  const terms = new Set((question.toLowerCase().match(/[a-z0-9]{3,}/g) || []).map(term => aliases[term] || term));
+  return examples
+    .map(example => {
+      const exampleTerms = (example.question.toLowerCase().match(/[a-z0-9]{3,}/g) || []).map(term => aliases[term] || term);
+      return { example, score: exampleTerms.filter(term => terms.has(term)).length };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score)[0]?.example;
+}
+
 export default function ResponseStudioPage() {
   const [tab, setTab] = useState<Tab>("configure");
   const [preferences, setPreferences] = useState<Preferences>(defaults);
@@ -83,6 +95,13 @@ export default function ResponseStudioPage() {
     setBusy(compare ? "compare" : "ask"); setError(""); setNotice("");
     setCurrentAnswer(""); setTemporaryAnswer("");
     try {
+      const approved = !compare ? matchingExample(question.trim(), examples) : undefined;
+      if (approved) {
+        setCurrentAnswer(approved.answer);
+        setPreferredAnswer(approved.answer);
+        setNotice("Showing your approved Library answer.");
+        return;
+      }
       const saved = await apiRequest<{ choices: { message: { content: string } }[] }>("/api/studio/ask", {
         method: "POST", body: JSON.stringify({ question: question.trim() }),
       });
