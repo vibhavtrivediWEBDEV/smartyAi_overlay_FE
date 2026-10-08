@@ -19,6 +19,9 @@ function parseAIResponse(text) {
   // Regex to match fenced code blocks with optional language
   // Matches: ```lang\ncode\n``` or ```\ncode\n```
   const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
+
+  // Regex to match Mermaid diagrams
+  const mermaidRegex = /```mermaid\n?([\s\S]*?)```/g;
   
   let lastIndex = 0;
   let match;
@@ -32,7 +35,8 @@ function parseAIResponse(text) {
         content: textBefore
       });
     }
-    
+
+    // Check if this is a Mermaid diagram
     const language = match[1] || detectLanguage(match[2]) || '';
     const codeContent = match[2].trim();
     
@@ -278,13 +282,23 @@ function processMarkdown(text) {
   processed = processed.replace(/<h1>([^<]+)<\/h1>/gi, '# $1\n');
   processed = processed.replace(/<h2>([^<]+)<\/h2>/gi, '## $1\n');
   processed = processed.replace(/<h3>([^<]+)<\/h3>/gi, '### $1\n');
-  
+
+  // Convert semantic HTML structure tags to markdown-friendly format
+  // Headers and footers become dividers with their content
   processed = processed.replace(/<header>([^<]*)<\/header>/gi, '\n---\n$1\n---\n');
   processed = processed.replace(/<footer>([^<]*)<\/footer>/gi, '\n---\n$1\n---\n');
+
+  // Sections and articles become bordered blocks
   processed = processed.replace(/<section>([^<]*)<\/section>/gi, '\n\n$1\n\n');
   processed = processed.replace(/<article>([^<]*)<\/article>/gi, '\n\n$1\n\n');
+
+  // Main content markers
   processed = processed.replace(/<main>([^<]*)<\/main>/gi, '\n\n$1\n\n');
+
+  // Navigation elements
   processed = processed.replace(/<nav>([^<]*)<\/nav>/gi, '\n$1\n');
+
+  // Aside content
   processed = processed.replace(/<aside>([^<]*)<\/aside>/gi, '\n> $1\n');
 
   // STEP 2: Remove ALL remaining HTML tags (XSS prevention)

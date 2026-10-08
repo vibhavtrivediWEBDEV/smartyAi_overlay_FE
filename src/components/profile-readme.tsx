@@ -98,7 +98,7 @@ function EmptyProfile() {
   return <div className="border border-white/10 bg-[#12120f] px-6 py-14 text-center md:px-12">
     <div className="mx-auto grid h-14 w-14 place-items-center border border-gold/30 bg-gold/5 text-gold"><FileText size={22} /></div>
     <h2 className="display-type mt-6 text-2xl font-semibold">Your profile is ready for a story</h2>
-    <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-[#8f887d]">Use non-sensitive sample data in the browser-local resume demo. Automatic desktop profile synchronization is disabled.</p>
+    <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-[#8f887d]">Use sample information in this browser workspace. Automatic desktop profile synchronization is disabled.</p>
   </div>;
 }
 
@@ -129,7 +129,7 @@ export function ProfileReadme({ account, context }: ProfileReadmeProps) {
           <div className="min-w-0">
             <p className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-gold"><span className="h-1.5 w-1.5 bg-emerald-400" />Professional profile</p>
             <h2 className="display-type wrap-break-word text-3xl font-semibold leading-tight md:text-4xl">{profileName}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#b8b0a3]">{resume.headline || "Demo professional context"}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#b8b0a3]">{resume.headline || "Professional context"}</p>
           </div>
         </div>
         <div className="grid shrink-0 gap-1 text-xs text-[#8f887d] sm:text-right">
@@ -160,7 +160,7 @@ export function ProfileReadme({ account, context }: ProfileReadmeProps) {
 
         {resume.skills.length > 0 && <section id="expertise" className="scroll-mt-6 border-b border-white/10 py-10">
           <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-gold">Expertise</p><h3 className="display-type mt-2 text-2xl font-semibold">What {profileName.split(" ")[0]} brings</h3></div><span className="text-xs text-[#625d55]">{resume.skills.length} capabilities</span></div>
-          <div className="mt-6 flex flex-wrap gap-2">{resume.skills.map((skill) => <span key={skill} className="border border-white/10 bg-white/2.5 px-3 py-2 text-xs text-[#d6cfc3] hover:border-gold/40 hover:text-white">{skill}</span>)}</div>
+          <div className="mt-6 flex flex-wrap gap-2">{resume.skills.map((skill, index) => <span key={`${skill}-${index}`} className="border border-white/10 bg-white/2.5 px-3 py-2 text-xs text-[#d6cfc3] hover:border-gold/40 hover:text-white">{skill}</span>)}</div>
         </section>}
 
         {sections.map((section) => {

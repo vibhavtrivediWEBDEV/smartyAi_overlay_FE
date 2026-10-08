@@ -1,4 +1,5 @@
 import type { JsonValue } from "@/lib/api";
+import ATS_KEYWORD_TERMS from "@/lib/ats-keywords.json";
 
 export type ResumeLink = { platform: string; url: string };
 export type ResumeProject = { name: string; description: string; technologies: string[]; links: string[] };
@@ -48,7 +49,7 @@ export const EMPTY_RESUME: ATSResume = {
   links: [],
 };
 
-const STOP_WORDS = new Set("a an and are as at be been being by for from has have in into is it its of on or that the their this to was were will with you your our we they role work working experience required preferred ability strong using use including knowledge team years responsibilities qualifications candidate ideal minimum plus must should about who what when where how across within through".split(" "));
+export const ATS_KEYWORDS = ATS_KEYWORD_TERMS;
 const ACTION_VERBS = ["achieved", "built", "created", "delivered", "designed", "developed", "drove", "implemented", "improved", "increased", "launched", "led", "managed", "optimized", "reduced", "resolved", "scaled", "shipped", "streamlined"];
 const QUANTIFIED = /(?:\b\d+(?:\.\d+)?\s*(?:%|percent|x|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?|k|m|b|users?|customers?|requests?|projects?|people|teams?)\b|[$€£₹]\s*\d[\d,.]*|\b\d[\d,.]*\+?\b)/i;
 const VAGUE = /\b(?:helped|assisted|worked on|responsible for|various|several|many things|duties included)\b/i;
@@ -100,7 +101,7 @@ export function resumeToText(resume: ATSResume): string {
 }
 
 export function resumeFromText(source: string): ATSResume {
-  const text = source.replace(/\r/g, "").replace(/[ \t]+/g, " ").trim();
+  const text = source.replace(/\r\n?/g, "\n").trim();
   const rawLines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const headingPattern = /^(professional summary|summary|profile|skills|technical skills|experience|work experience|employment|education|projects|achievements|accomplishments|certifications|languages|links)$/i;
   const sections = new Map<string, string[]>();
@@ -111,7 +112,7 @@ export function resumeFromText(source: string): ATSResume {
       current = line.replace(/:$/, "").toLowerCase();
       sections.set(current, []);
     } else {
-      sections.get(current)?.push(line.replace(/^[•*-]\s*/, ""));
+      sections.get(current)?.push(line);
     }
   }
   const header = sections.get("header") ?? [];
@@ -125,7 +126,7 @@ export function resumeFromText(source: string): ATSResume {
     email,
     phone,
     headline: header.filter((line) => line !== email && line !== phone)[1] ?? "",
-    summary: take("professional summary", "summary", "profile").join(" "),
+    summary: take("professional summary", "summary", "profile").join("\n"),
     skills: take("skills", "technical skills").flatMap((line) => line.split(/[,|•]/)).map((item) => item.trim()).filter(Boolean),
     experience: take("experience", "work experience", "employment"),
     education: take("education"),
@@ -146,27 +147,44 @@ function normalizedWords(value: string) {
   return value.normalize("NFKC").toLowerCase().match(/[a-z][a-z0-9]*(?:\.[a-z0-9]+|\+\+|#)?/g) ?? [];
 }
 
+export function cleanJobDescription(jobDescription: string) {
+  return jobDescription
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[^\n]*\n?|```/g, " "))
+    .replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s{0,3}(?:[-+*]|\d+[.)])\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/\*{1,3}|_{1,3}|~~|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function keywords(jobDescription: string) {
-  const words = normalizedWords(jobDescription);
+  const cleanText = cleanJobDescription(jobDescription);
+  const occurrences = ATS_KEYWORD_TERMS.flatMap((term) => {
+    const pattern = new RegExp(`(?:^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^a-z0-9])`, "gi");
+    return [...cleanText.matchAll(pattern)].map((match) => {
+      const offset = match.index ?? 0;
+      const start = offset + (match[0].length - term.length);
+      return { term, start, end: start + term.length };
+    });
+  }).sort((left, right) => left.start - right.start || right.end - left.end);
+  const distinctOccurrences = occurrences.filter((occurrence, index) => !occurrences.some((candidate, candidateIndex) =>
+    candidateIndex !== index && candidate.start <= occurrence.start && candidate.end >= occurrence.end &&
+    (candidate.start < occurrence.start || candidate.end > occurrence.end)
+  ));
   const counts = new Map<string, number>();
-  for (const word of words.filter((item) => item.length > 1 && !STOP_WORDS.has(item))) counts.set(word, (counts.get(word) ?? 0) + 1);
-  for (let index = 0; index < words.length - 1; index += 1) {
-    const left = words[index];
-    const right = words[index + 1];
-    if (STOP_WORDS.has(left) || STOP_WORDS.has(right) || left.length < 2 || right.length < 2) continue;
-    const phrase = `${left} ${right}`;
-    counts.set(phrase, (counts.get(phrase) ?? 0) + 1.5);
-  }
+  for (const occurrence of distinctOccurrences) counts.set(occurrence.term, (counts.get(occurrence.term) ?? 0) + 1);
   return [...counts]
     .map(([term, count]) => ({ term, count, phrase: term.includes(" ") }))
     .sort((left, right) => right.count - left.count || Number(right.phrase) - Number(left.phrase) || left.term.localeCompare(right.term))
-    .slice(0, 60);
+    .slice(0, 40);
 }
 
 export function assessJobDescription(jobDescription: string) {
   const meaningfulTerms = keywords(jobDescription);
-  const wordCount = normalizedWords(jobDescription).length;
-  const ready = jobDescription.trim().length >= 120 && wordCount >= 20 && meaningfulTerms.length >= 10;
+  const wordCount = normalizedWords(cleanJobDescription(jobDescription)).length;
+  const ready = cleanJobDescription(jobDescription).length >= 80 && wordCount >= 12 && meaningfulTerms.length >= 4;
   return {
     ready,
     wordCount,
@@ -175,6 +193,10 @@ export function assessJobDescription(jobDescription: string) {
       ? "Job description ready for fit analysis."
       : "Paste the role responsibilities and requirements, not only the job title.",
   };
+}
+
+export function extractJobKeywords(jobDescription: string) {
+  return keywords(jobDescription).map(({ term }) => term);
 }
 
 function containsTerm(text: string, term: string) {
@@ -200,7 +222,7 @@ export function scoreResume(resume: ATSResume, jobDescription: string): ATSScore
     const placement = containsTerm(prominentText, item.term) ? 1.15 : containsTerm(evidenceText, item.term) ? 1.08 : 1;
     return sum + base * placement;
   }, 0);
-  const titleLine = normalizedWords(jobDescription.split("\n").find((line) => line.trim()) ?? "").slice(0, 8).join(" ");
+  const titleLine = normalizedWords(cleanJobDescription(jobDescription).split(/(?<=[.!?])\s+/)[0] ?? "").slice(0, 8).join(" ");
   const titleAligned = titleLine.length > 2 && normalizedWords(resume.headline).some((word) => titleLine.includes(word));
   const alignment = jobDescriptionAssessment.ready && totalWeight ? bounded(Math.min(1, matchedWeight / totalWeight) * 42 + (titleAligned ? 3 : 0), 45) : 0;
   const contactComplete = [resume.name, resume.email, resume.phone, resume.location].filter(Boolean).length;

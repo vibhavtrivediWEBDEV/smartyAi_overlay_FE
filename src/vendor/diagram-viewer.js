@@ -165,7 +165,14 @@ class DiagramViewer {
       const uniqueId = `diagram-${Date.now()}-${Math.random().toString(16).slice(8)}`;
 
       try {
+        const valid = await window.mermaid.parse(sanitizedSource, { suppressErrors: true });
+        if (!valid) {
+          throw new Error('Invalid Mermaid syntax. Check the diagram source and try again.');
+        }
         const { svg } = await window.mermaid.render(uniqueId, sanitizedSource);
+        if (/Syntax error in text|mermaid version \d/i.test(svg)) {
+          throw new Error('Invalid Mermaid syntax. Check the diagram source and try again.');
+        }
         diagramSvgWrapper.innerHTML = svg;
         // Ensure SVG does not carry any script-executing attributes.
         const svgEl = diagramSvgWrapper.querySelector('svg');
@@ -174,8 +181,10 @@ class DiagramViewer {
           svgEl.querySelectorAll('script').forEach(s => s.remove());
         }
       } catch (err) {
-        const message = err && err.message ? err.message : String(err);
-        diagramSvgWrapper.innerHTML = `<div class="diagram-error">Invalid Mermaid syntax: ${this.escapeHtml(message)}</div>`;
+        const error = document.createElement('div');
+        error.className = 'diagram-error';
+        error.textContent = 'Invalid Mermaid syntax. Check the diagram source and try again.';
+        diagramSvgWrapper.replaceChildren(error);
       }
     };
 
