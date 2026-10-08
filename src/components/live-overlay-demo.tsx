@@ -33,6 +33,8 @@ import { API_BASE_URL, DEMO_API_BASE_URL } from "@/lib/api";
 import interviewDemo from "@/content/interview-demo.json";
 import CodeViewer from "@/vendor/code-viewer.js";
 import ResponseParser from "@/vendor/response-parser.js";
+import DiagramViewer from "@/vendor/diagram-viewer.js";
+import mermaid from "mermaid";
 
 type DemoUsage = {
   limit: number;
@@ -143,10 +145,39 @@ function SharedCodeViewer({ content, language, incomplete }: { content: string; 
   return <div ref={mountRef} />;
 }
 
+function SharedDiagramViewer({ content }: { content: string }) {
+  const mountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    const mermaidWindow = window as Window & { mermaid?: typeof mermaid };
+    mermaidWindow.mermaid = mermaid;
+    if (!document.querySelector('link[data-smartyai-diagram-styles]')) {
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = "/diagram-viewer.css";
+      stylesheet.dataset.smartyaiDiagramStyles = "true";
+      document.head.appendChild(stylesheet);
+    }
+    const viewer = new DiagramViewer();
+    mount.replaceChildren(viewer.render(content));
+    return () => mount.replaceChildren();
+  }, [content]);
+
+  return <div ref={mountRef} />;
+}
+
 function AssistantResponse({ content }: { content: string }) {
-  return <>{ResponseParser.parseAIResponse(content).map((block, index) => block.type === "code"
-    ? <SharedCodeViewer key={index} content={block.content} language={block.language} incomplete={block.incomplete} />
-    : <ResponseText key={index} content={block.content} />)}</>;
+  return <>{ResponseParser.parseAIResponse(content).map((block, index) => {
+    if (block.type === "mermaid") {
+      return <SharedDiagramViewer key={index} content={block.content} />;
+    }
+    if (block.type === "code") {
+      return <SharedCodeViewer key={index} content={block.content} language={block.language} incomplete={block.incomplete} />;
+    }
+    return <ResponseText key={index} content={block.content} />;
+  })}</>;
 }
 
 function localTime(value?: string) {
@@ -248,7 +279,7 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
       .then((nextSession) => {
         if (!active) return;
         setSession(nextSession);
-        setStatus("Live demo connected");
+        setStatus("Interview workspace connected");
       })
       .catch((error: Error) => active && setStatus(error.message));
     return () => {
@@ -414,7 +445,7 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
       try {
         setSession(await createDemoSession());
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "The live demo is unavailable");
+        setStatus(error instanceof Error ? error.message : "The interview workspace is unavailable");
         requestInFlightRef.current = false;
         return;
       }
@@ -428,6 +459,8 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
     const createdAt = new Date().toISOString();
     const baseMessages = recordUser ? messages : messages.slice(0, -1);
     const history = recordUser ? [...baseMessages, { role: "user" as const, content: question, createdAt }] : baseMessages;
+    const requestMessages = history.filter((message) => !message.sample).slice(-21)
+      .map(({ role, content }) => ({ role, content }));
     setMessages([...history, { role: "assistant", content: "", createdAt }]);
     setPrompt("");
     setStreaming(true);
@@ -446,7 +479,7 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
             "ngrok-skip-browser-warning": "true",
             ...(mode === "api" ? { "x-api-key": apiKey.trim() } : {}),
           },
-          body: JSON.stringify({ messages: history, stream: true }),
+          body: JSON.stringify({ messages: requestMessages, stream: true }),
         },
       );
       let response = await requestChat();
@@ -504,7 +537,7 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
         : message));
       setStatus("Response complete");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The live demo is unavailable";
+      const message = error instanceof Error ? error.message : "The interview workspace is unavailable";
       setMessages((current) => current.map((item, index) => index === current.length - 1 && !item.content ? { ...item, content: message } : item));
       setStatus(message);
     } finally {
@@ -940,7 +973,7 @@ export function LiveOverlayDemo({ verticalToolbar = false }: { verticalToolbar?:
 
       {showTour && <aside className={`overlay-demo-tour ${currentTourStep ? "is-stepping" : ""}`} role="dialog" aria-label="SmartyAI overlay controls tour">
         {!currentTourStep ? <>
-          <Image src="/smartyai-hinglish-comedy-sticker.svg" alt="Arre yaar, type karke dekh na. Asli live demo yahin hai." width={340} height={160} priority />
+          <Image src="/smartyai-hinglish-comedy-sticker.svg" alt="Arre yaar, type karke dekh na. SmartyAI ka live workspace yahin hai." width={340} height={160} priority />
           <div>
             <strong>Window ko khud chala ke dekho.</strong>
             <p>Ab har control ko ek-ek karke dekhenge, exactly uske Electron shortcut ke saath.</p>

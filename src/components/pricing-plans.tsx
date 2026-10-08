@@ -25,8 +25,6 @@ export function PricingPlans({ plans }: PricingPlansProps) {
             { title: "Capture-protected overlay", detail: "Requests OS capture exclusion; results vary by platform and sharing app" },
             { title: "Custom AI behavior", detail: "Tune behavioral, technical, and response preferences" },
             { title: `${plan.atsResumeLimit} ATS ${plan.atsResumeLimit === 1 ? "improvement" : "improvements"}`, detail: "Optimize against a target job description" },
-            ...(plan.linkedinApplications > 0 ? [{ title: `${plan.applicationsUnlimited ? "Unlimited" : plan.linkedinApplications.toLocaleString("en-IN")} LinkedIn Apply`, detail: "Included in this plan" }] : []),
-            ...(plan.naukriApplications > 0 ? [{ title: `${plan.applicationsUnlimited ? "Unlimited" : plan.naukriApplications.toLocaleString("en-IN")} Naukri Apply`, detail: "Included in this plan" }] : []),
           ];
           return (
             <article key={plan.key} className={`home-pricing-card${featured ? " featured" : ""}`}>
@@ -47,6 +45,11 @@ export function PricingPlans({ plans }: PricingPlansProps) {
                   </div>
                 ))}
               </div>
+              {(plan.linkedinApplications > 0 || plan.naukriApplications > 0) && (
+                <p className="px-6 pb-4 text-xs leading-5 text-[#aaa397]">
+                  Job-application figures in the plan data are not available in today&apos;s checkout. Do not purchase this plan for application automation.
+                </p>
+              )}
               <Link href={`/register?plan=${plan.key}`} className="home-pricing-cta">Choose {plan.name}<ArrowRight size={15} /></Link>
             </article>
           );

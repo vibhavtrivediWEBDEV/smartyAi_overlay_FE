@@ -30,7 +30,8 @@ export function downloadResumePdf(resume: ATSResume) {
     const size = options.size ?? 10;
     pdf.setFont("helvetica", options.bold ? "bold" : "normal");
     pdf.setFontSize(size);
-    const lines = pdf.splitTextToSize(`${options.bullet ? "• " : ""}${value}`, width) as string[];
+    const bullet = options.bullet && !/^[•*-]\s/.test(value) ? "• " : "";
+    const lines = pdf.splitTextToSize(`${bullet}${value}`, width) as string[];
     const height = lines.length * size * 0.42 + (options.gap ?? 1);
     ensureRoom(height);
     pdf.text(lines, margin, y);
@@ -61,4 +62,24 @@ export function downloadResumePdf(resume: ATSResume) {
   list("Certifications", resume.certifications);
   list("Languages", resume.languages);
   pdf.save(resumeFileName(resume.name));
+}
+
+export function downloadResumeTextPdf(source: string, name: string) {
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const margin = 18;
+  const width = 174;
+  let y = 18;
+  pdf.setFont("courier", "normal");
+  pdf.setFontSize(9);
+  for (const sourceLine of source.replace(/\r\n?/g, "\n").split("\n")) {
+    const wrapped = sourceLine ? pdf.splitTextToSize(sourceLine, width) as string[] : [""];
+    const lineHeight = 4.5;
+    if (y + wrapped.length * lineHeight > 279) {
+      pdf.addPage();
+      y = 18;
+    }
+    if (sourceLine) pdf.text(wrapped, margin, y);
+    y += Math.max(lineHeight, wrapped.length * lineHeight);
+  }
+  pdf.save(resumeFileName(name));
 }

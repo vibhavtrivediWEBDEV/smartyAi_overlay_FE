@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Bot, Check, ChevronRight, Download, Eye, FileText, LoaderCircle, LockKeyhole, PencilLine, RefreshCw, Save, ShieldCheck, Sparkles, Target, Upload, X } from "lucide-react";
-import { assessJobDescription, ATS_SCORE_VERSION, EMPTY_RESUME, resumeFromText, scoreResume, type ATSResume } from "@/lib/ats";
-import { downloadResumePdf, extractPdfText } from "@/lib/ats-pdf";
+import { AlertCircle, Check, ChevronRight, Download, Eye, FileText, LoaderCircle, PencilLine, RefreshCw, Save, Sparkles, Target, Upload, X } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { apiRequest, type JsonValue, type ProfileContext } from "@/lib/api";
+import { assessJobDescription, ATS_SCORE_VERSION, cleanJobDescription, EMPTY_RESUME, resumeFromProfile, resumeFromText, scoreResume, type ATSResume } from "@/lib/ats";
+import { downloadResumePdf, downloadResumeTextPdf, extractPdfText } from "@/lib/ats-pdf";
 
-const DEMO_DRAFT_KEY = "smartyai_demo_ats_draft";
 const SECTIONS = ["Personal", "Summary", "Skills", "Experience", "Education", "Projects", "Achievements", "Certifications", "Languages", "Links"] as const;
 const CONTACT_FIELD_IDS = new Set(["name", "email", "phone", "location"]);
 type Section = typeof SECTIONS[number];
@@ -17,21 +18,81 @@ type ResumeOptimization = {
   changes: Array<{ section: string; before: string; after: string; reason: string; keywordsAddressed: string[] }>;
   missingEvidenceQuestions: string[];
   prioritizedKeywords: string[];
+  revisedText: string;
+  addedTerms: string[];
+  skippedTerms: string[];
+  verifiedTerms: string[];
+  changeNotes: string;
   promptVersion: string;
   beforeScore: number;
   afterScore: number;
 };
+type ResumeOptimizationResponse = Omit<ResumeOptimization, "beforeScore" | "afterScore" | "addedTerms" | "skippedTerms" | "verifiedTerms" | "missingEvidenceQuestions"> & Partial<Pick<ResumeOptimization, "addedTerms" | "skippedTerms" | "verifiedTerms" | "missingEvidenceQuestions">>;
 type FieldOptimizationRequest = {
   id: string;
   label: string;
   before: string;
+  targetLine?: string;
+  targetIndex?: number;
   read: (resume: ATSResume) => string;
   apply: (resume: ATSResume, value: string) => ATSResume;
 };
-type FieldSuggestion = FieldOptimizationRequest & { after: string; reason: string; scoreDelta: number };
+type FieldSuggestion = FieldOptimizationRequest & { after: string; reason: string; scoreDelta: number; matchedDelta: number; missingDelta: number; missingEvidenceQuestions: string[]; addedTerms: string[]; skippedTerms: string[]; verifiedTerms: string[] };
+type CandidateEvidence = { what: string; how: string; result: string };
+type TermAnswer = { status: "yes" | "no" | "skip"; evidence: string };
 
 function lines(value: string) {
   return value.split("\n").map((item) => item.trim()).filter(Boolean);
+}
+
+function termFromQuestion(question: string) {
+  return question.match(/^JD asks for (.+?)\. Have you used /i)?.[1] || question;
+}
+
+function isRecord(value: JsonValue | undefined): value is { [key: string]: JsonValue } {
+  return Boolean(value) && !Array.isArray(value) && typeof value === "object";
+}
+
+function isATSResume(value: JsonValue | undefined): value is JsonValue & ATSResume {
+  if (!isRecord(value)) return false;
+  const stringFields = ["name", "email", "phone", "location", "headline", "summary"];
+  const listFields = ["skills", "experience", "education", "achievements", "certifications", "languages"];
+  return stringFields.every((field) => typeof value[field] === "string") &&
+    listFields.every((field) => Array.isArray(value[field]) && value[field].every((item) => typeof item === "string")) &&
+    Array.isArray(value.projects) && value.projects.every((project) => isRecord(project) && typeof project.name === "string" && typeof project.description === "string" && Array.isArray(project.technologies) && project.technologies.every((item) => typeof item === "string") && Array.isArray(project.links) && project.links.every((item) => typeof item === "string")) &&
+    Array.isArray(value.links) && value.links.every((link) => isRecord(link) && typeof link.platform === "string" && typeof link.url === "string");
+}
+
+function accountResumeFromContext(context: ProfileContext, accountName: string, accountEmail: string): ATSResume {
+  const data = context.resume?.data;
+  let accountResume = EMPTY_RESUME;
+  if (data) {
+    if (isATSResume(data)) {
+      accountResume = data;
+    } else if (typeof data.text === "string" && data.text.trim()) {
+      const extracted = resumeFromText(data.text);
+      const mapped = resumeFromProfile(data);
+      accountResume = {
+        ...extracted,
+        name: mapped.name || extracted.name,
+        email: mapped.email || extracted.email,
+        phone: mapped.phone || extracted.phone,
+        location: mapped.location || extracted.location,
+        headline: mapped.headline || extracted.headline,
+        summary: mapped.summary || extracted.summary,
+        skills: mapped.skills.length ? mapped.skills : extracted.skills,
+        experience: mapped.experience.length ? mapped.experience : extracted.experience,
+        education: mapped.education.length ? mapped.education : extracted.education,
+        achievements: mapped.achievements.length ? mapped.achievements : extracted.achievements,
+        certifications: mapped.certifications.length ? mapped.certifications : extracted.certifications,
+        languages: mapped.languages.length ? mapped.languages : extracted.languages,
+        links: mapped.links.length ? mapped.links : extracted.links,
+      };
+    } else {
+      accountResume = resumeFromProfile(data);
+    }
+  }
+  return { ...accountResume, name: accountResume.name || accountName, email: accountResume.email || accountEmail };
 }
 
 function sectionProgress(section: Section, resume: ATSResume) {
@@ -52,12 +113,15 @@ function sectionProgress(section: Section, resume: ATSResume) {
 }
 
 export function ATSResumeBuilder() {
+  const { user } = useAuth();
   const [resume, setResume] = useState<ATSResume>(EMPTY_RESUME);
-  const [sourceResume, setSourceResume] = useState<ATSResume>(EMPTY_RESUME);
+  const [documentText, setDocumentText] = useState("");
+  const [documentMode, setDocumentMode] = useState(false);
   const [jobDescription, setJobDescription] = useState("");
   const [section, setSection] = useState<Section>("Personal");
   const [mode, setMode] = useState<WorkspaceMode>("editor");
   const [loading, setLoading] = useState(true);
+  const [loadingAccountResume, setLoadingAccountResume] = useState(false);
   const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -65,29 +129,34 @@ export function ATSResumeBuilder() {
   const [optimizing, setOptimizing] = useState(false);
   const [fieldSuggestion, setFieldSuggestion] = useState<FieldSuggestion | null>(null);
   const [optimizingField, setOptimizingField] = useState("");
+  const [candidateEvidence, setCandidateEvidence] = useState<CandidateEvidence>({ what: "", how: "", result: "" });
+  const [showEvidenceForm, setShowEvidenceForm] = useState(false);
+  const [pendingField, setPendingField] = useState<FieldOptimizationRequest | null>(null);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, TermAnswer>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const jobDescriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const hydrationTimer = window.setTimeout(() => {
-      try {
-        const stored = window.localStorage.getItem(DEMO_DRAFT_KEY);
-        if (stored) {
-          const draft = JSON.parse(stored) as { resume?: ATSResume; jobDescription?: string };
-          if (draft.resume) {
-            setResume(draft.resume);
-            setSourceResume(draft.resume);
-          }
-          if (typeof draft.jobDescription === "string") setJobDescription(draft.jobDescription);
-        }
-      } catch {
-        setError("The local demo draft could not be read.");
-      } finally {
-        setLoading(false);
-      }
-    }, 0);
-    return () => window.clearTimeout(hydrationTimer);
-  }, []);
+    let active = true;
+    apiRequest<{ context: ProfileContext }>("/api/profile/context")
+      .then(({ context }) => {
+        if (!active) return;
+        const profileResume = accountResumeFromContext(context, user?.name || "", user?.email || "");
+        const savedDraft = context.atsDraft && isATSResume(context.atsDraft.data) ? context.atsDraft.data : null;
+        const savedSource = context.atsDraft && typeof context.atsDraft.data.originalDocument === "string" ? context.atsDraft.data.originalDocument : "";
+        const profileSource = context.resume && typeof context.resume.data.text === "string" ? context.resume.data.text : "";
+        const source = savedSource || profileSource;
+        setResume(savedDraft || profileResume);
+        setDocumentText(source);
+        setDocumentMode(Boolean(source));
+        setJobDescription(cleanJobDescription(context.atsDraft?.jobDescription || context.jobDescription?.text || ""));
+      })
+      .catch((caught) => {
+        if (active) setError(caught instanceof Error ? caught.message : "Unable to load your account resume.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.email, user?.name]);
 
   const score = useMemo(() => scoreResume(resume, jobDescription), [resume, jobDescription]);
   const jobDescriptionAssessment = useMemo(() => assessJobDescription(jobDescription), [jobDescription]);
@@ -96,10 +165,24 @@ export function ATSResumeBuilder() {
   const saveDraft = async () => {
     setStatus(""); setError("");
     try {
-      window.localStorage.setItem(DEMO_DRAFT_KEY, JSON.stringify({ resume, jobDescription }));
-      setSourceResume(resume);
-      setStatus("Demo draft saved in this browser only.");
+      await apiRequest("/api/profile/resume/ats-draft", { method: "PUT", body: JSON.stringify({ draft: { ...resume, originalDocument: documentText }, jobDescription }) });
+      setStatus("ATS draft saved to your SmartyAI account.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to save the draft."); }
+  };
+  const loadAccountResume = async () => {
+    setLoadingAccountResume(true); setStatus(""); setError("");
+    try {
+      const { context } = await apiRequest<{ context: ProfileContext }>("/api/profile/context");
+      const latest = accountResumeFromContext(context, user?.name || "", user?.email || "");
+      const source = context.resume && typeof context.resume.data.text === "string" ? context.resume.data.text : "";
+      setResume(latest);
+      setDocumentText(source);
+      setDocumentMode(Boolean(source));
+      setJobDescription(cleanJobDescription(context.jobDescription?.text || ""));
+      setOptimization(null); setFieldSuggestion(null);
+      setStatus(context.resume ? "Loaded your account resume." : "No account resume is saved yet. Import a PDF or enter your details, then save an ATS draft.");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to load your account resume."); }
+    finally { setLoadingAccountResume(false); }
   };
   const importPdf = async (file: File | undefined) => {
     if (!file) return;
@@ -110,21 +193,42 @@ export function ATSResumeBuilder() {
       const text = await extractPdfText(file);
       if (text.trim().length < 40) throw new Error("This PDF has little selectable text. Try a text-based PDF or use the structured editor.");
       const imported = resumeFromText(text);
-      setResume(imported); setSourceResume(imported); setStatus(`Imported ${file.name} locally. Review the extracted fields before saving.`);
+      setDocumentText(text); setDocumentMode(true); setResume(imported); setStatus(`Imported ${file.name}. Text order and existing bullets are retained; review before saving.`);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "The PDF could not be read."); }
     finally { setImporting(false); if (inputRef.current) inputRef.current.value = ""; }
   };
-  const optimizeResume = async () => {
+  const optimizeResume = async (evidence = candidateEvidence) => {
     if (!jobDescriptionAssessment.ready) {
       setError(jobDescriptionAssessment.guidance);
       jobDescriptionRef.current?.focus();
       jobDescriptionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    setOptimization(null); setOptimizing(false); setError("");
-    setStatus("AI optimization is disabled in this demo so resume and job-description data are not transmitted.");
+    setPendingField(null); setOptimization(null); setOptimizing(true); setError(""); setStatus("");
+    try {
+      const result = await apiRequest<ResumeOptimizationResponse>("/api/resume/optimize", {
+        method: "POST",
+        body: JSON.stringify({ resume, jobDescription, evidence }),
+      });
+      setOptimization({
+        ...result,
+        missingEvidenceQuestions: Array.isArray(result.missingEvidenceQuestions) ? result.missingEvidenceQuestions : [],
+        addedTerms: Array.isArray(result.addedTerms) ? result.addedTerms : [],
+        skippedTerms: Array.isArray(result.skippedTerms) ? result.skippedTerms : [],
+        verifiedTerms: Array.isArray(result.verifiedTerms) ? result.verifiedTerms : [],
+        beforeScore: score.total,
+        afterScore: scoreResume(result.optimizedResume, jobDescription).total,
+      });
+      setShowEvidenceForm(false);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Resume optimization failed.";
+      if (message.toLowerCase().includes("unsupported factual")) {
+        setShowEvidenceForm(true);
+        setError("Nothing was changed. The review blocked a detail it could not verify. Add the real specifics you can confirm, then retry.");
+      } else setError(message);
+    } finally { setOptimizing(false); }
   };
-  const optimizeField = async (request: FieldOptimizationRequest) => {
+  const optimizeField = async (request: FieldOptimizationRequest, evidence = candidateEvidence) => {
     if (CONTACT_FIELD_IDS.has(request.id)) {
       setFieldSuggestion(null); setError("");
       setStatus(`${request.label} is contact data, not ATS optimization content. It already counts once present, so AI will not rewrite it for a cosmetic score claim.`);
@@ -136,62 +240,127 @@ export function ATSResumeBuilder() {
       jobDescriptionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    setOptimizingField(""); setFieldSuggestion(null); setError("");
-    setStatus(`AI changes for ${request.label.toLowerCase()} are disabled in this demo so your data stays in this browser.`);
+    setPendingField(request); setOptimizingField(request.id); setFieldSuggestion(null); setError(""); setStatus("");
+    try {
+      const beforeScore = score;
+      const verifiedAnswers = request.id === "summary"
+        ? Object.entries(questionAnswers).map(([term, answer]) => ({ term, ...answer }))
+        : [];
+      const result = await apiRequest<ResumeOptimizationResponse>("/api/resume/optimize", {
+        method: "POST",
+        body: JSON.stringify({ resume, jobDescription, focusField: request.label, targetField: request.id === "summary" ? "summary" : "", targetLine: request.targetLine, targetLineIndex: request.targetIndex, evidence: request.id === "summary" ? undefined : evidence, verifiedAnswers }),
+      });
+      const missingEvidenceQuestions = Array.isArray(result.missingEvidenceQuestions) ? result.missingEvidenceQuestions : [];
+      const after = request.read(result.optimizedResume);
+      if (after.trim() === request.before.trim() && !missingEvidenceQuestions.length && request.id !== "summary") throw new Error(`The AI could not suggest a supported improvement for ${request.label.toLowerCase()}.`);
+      const updatedResume = request.apply(resume, after);
+      const afterScore = scoreResume(updatedResume, jobDescription);
+      const change = result.changes.find((item) => item.after === after);
+      const nextAnswers = Object.fromEntries(missingEvidenceQuestions.map((question) => {
+        const term = termFromQuestion(question);
+        return [term, questionAnswers[term] || { status: "skip", evidence: "" }];
+      }));
+      setQuestionAnswers(nextAnswers);
+      setFieldSuggestion({
+        ...request,
+        after,
+        reason: change?.reason || result.changeNotes || result.summary,
+        scoreDelta: afterScore.total - beforeScore.total,
+        matchedDelta: afterScore.matchedKeywords.length - beforeScore.matchedKeywords.length,
+        missingDelta: afterScore.missingKeywords.length - beforeScore.missingKeywords.length,
+        missingEvidenceQuestions,
+        addedTerms: Array.isArray(result.addedTerms) ? result.addedTerms : [],
+        skippedTerms: Array.isArray(result.skippedTerms) ? result.skippedTerms : [],
+        verifiedTerms: Array.isArray(result.verifiedTerms) ? result.verifiedTerms : [],
+      });
+      setShowEvidenceForm(request.id !== "summary" && after.trim() === request.before.trim());
+      if (request.id === "summary" && after.trim() === request.before.trim()) {
+        setStatus(result.changeNotes || "The review kept your Summary unchanged. Confirmed terms are listed below if they were not relevant enough to include.");
+      } else if (request.id === "summary") {
+        setStatus("A revised Summary is ready to review below. Select Apply to field to replace your current Summary.");
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : `Unable to improve ${request.label.toLowerCase()}.`;
+      if (message.toLowerCase().includes("unsupported factual")) {
+        setShowEvidenceForm(request.id !== "summary");
+        setError("Nothing was changed. The review blocked a detail it could not verify. Add the real specifics you can confirm, then retry.");
+      } else setError(message);
+    } finally { setOptimizingField(""); }
   };
+  const retryWithEvidence = () => pendingField ? void optimizeField(pendingField, candidateEvidence) : void optimizeResume(candidateEvidence);
   const applyFieldSuggestion = () => {
     if (!fieldSuggestion) return;
     setResume((current) => fieldSuggestion.apply(current, fieldSuggestion.after));
+    if (fieldSuggestion.targetLine && documentText) {
+      const sourceLines = documentText.split("\n");
+      const matchingLines = sourceLines.flatMap((line, index) => line.trim() === fieldSuggestion.targetLine?.trim() ? [index] : []);
+      const duplicateOrdinal = fieldSuggestion.targetIndex === undefined ? 0 : resume.experience.slice(0, fieldSuggestion.targetIndex).filter((line) => line.trim() === fieldSuggestion.targetLine?.trim()).length;
+      const sourceLineIndex = matchingLines.length === 1 ? matchingLines[0] : matchingLines[duplicateOrdinal] ?? -1;
+      if (sourceLineIndex >= 0) {
+        const index = sourceLineIndex;
+        const indentation = sourceLines[index].match(/^\s*/)?.[0] || "";
+        sourceLines[index] = `${indentation}${fieldSuggestion.after}`;
+        setDocumentText(sourceLines.join("\n"));
+      }
+    } else if (fieldSuggestion.id === "summary" && documentText) {
+      const sourceLines = documentText.split("\n");
+      const headingPattern = /^(professional summary|summary|profile):?$/i;
+      const sectionPattern = /^(professional summary|summary|profile|skills|technical skills|experience|work experience|employment|education|projects|achievements|accomplishments|certifications|languages|links):?$/i;
+      const headingIndex = sourceLines.findIndex((line) => headingPattern.test(line.trim()));
+      if (headingIndex >= 0) {
+        let endIndex = sourceLines.findIndex((line, index) => index > headingIndex && sectionPattern.test(line.trim()));
+        if (endIndex < 0) endIndex = sourceLines.length;
+        const currentSectionText = sourceLines.slice(headingIndex + 1, endIndex).join("\n").trim();
+        if (currentSectionText === fieldSuggestion.before.trim()) {
+          sourceLines.splice(headingIndex + 1, endIndex - headingIndex - 1, ...fieldSuggestion.after.split("\n"));
+          setDocumentText(sourceLines.join("\n"));
+        }
+      }
+    }
     setStatus(`${fieldSuggestion.label} updated. Review the wording, then save your draft.`);
     setFieldSuggestion(null);
   };
   const applyOptimization = () => {
     if (!optimization) return;
     setResume(optimization.optimizedResume);
+    setDocumentMode(false);
     setOptimization(null);
     setStatus("ATS optimization applied. Verify every statement before saving or downloading.");
   };
 
   if (loading) return <div className="grid min-h-[55vh] place-items-center text-sm text-[#8f887d]"><LoaderCircle className="mr-2 inline animate-spin" size={18} />Loading resume workspace...</div>;
   return <div className="mx-auto max-w-[1680px]">
-    <section className="relative mb-5 overflow-hidden border border-gold/25 bg-[#11110e] shadow-[0_24px_80px_rgba(0,0,0,.34)]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(230,197,122,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(230,197,122,.045)_1px,transparent_1px)] bg-size-[48px_48px]" />
-      <div className="relative grid xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="px-6 py-8 md:px-9 md:py-10">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-gold"><span className="h-1.5 w-1.5 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.75)]" />Browser-local resume demo</div>
-          <h1 className="display-type mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-normal md:text-5xl">Build the resume that enters first.</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-[#9e978b]">Use non-sensitive sample data to explore the editor. PDF parsing and draft storage stay in this browser; AI optimization is disabled in the demo.</p>
-          <div className="mt-7 grid max-w-3xl gap-px border border-white/10 bg-white/10 sm:grid-cols-3">
-            <AgentStep number="01" label="Analyze" detail={jobDescriptionAssessment.ready ? "Role mapped" : "Add target role"} active={!optimization} />
-            <AgentStep number="02" label="Review" detail="Evidence checked" active={Boolean(optimization)} />
-            <AgentStep number="03" label="Apply" detail="You approve" />
-          </div>
+    <header className="mb-5 border-b border-white/10 pb-5">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-gold"><span className="h-1.5 w-1.5 bg-emerald-400" />Resume workspace</p>
+          <h1 className="mt-2 text-2xl font-semibold text-[#eee9df]">Your resume</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#8f887d]">Edit your experience, review suggestions, and keep every claim grounded in what you actually did.</p>
         </div>
-        <div className="relative border-t border-gold/20 bg-[#c9a35b] p-6 text-[#12100b] xl:border-l xl:border-t-0 md:p-8">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-black/55">{score.jobDescriptionReady ? "Live target fit" : "Resume readiness"}</p><p className="display-type mt-3 text-6xl font-semibold leading-none">{score.total}<span className="text-lg text-black/45">/100</span></p></div><Target size={28} strokeWidth={1.5} /></div>
-          <p className="mt-4 text-xs font-semibold leading-5 text-black/65">{score.jobDescriptionReady ? `${score.matchedKeywords.length} role terms matched with ${score.missingKeywords.length} evidence gaps to review.` : "Complete the role brief to unlock evidence-based matching."}</p>
-          <div className="mt-6 h-1.5 bg-black/15"><div className="h-full bg-[#15130e] transition-[width] duration-500" style={{ width: `${score.total}%` }} /></div>
-          <div className="mt-6 grid grid-cols-2 gap-px bg-black/15 text-[10px] font-bold uppercase tracking-[.08em]"><span className="flex items-center gap-2 bg-[#d5b46e] px-3 py-3"><ShieldCheck size={14} />Facts guarded</span><span className="flex items-center gap-2 bg-[#d5b46e] px-3 py-3"><LockKeyhole size={14} />Private draft</span></div>
+        <div className="flex items-center gap-3 border-l-2 border-gold/60 pl-4 lg:min-w-56">
+          <Target className="shrink-0 text-gold" size={20} strokeWidth={1.6} />
+          <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8f887d]">{score.jobDescriptionReady ? "Target role fit" : "Resume readiness"}</p><p className="mt-0.5 text-lg font-semibold text-[#eee9df]">{score.total}<span className="ml-1 text-xs font-normal text-[#777066]">/100</span><span className="ml-2 text-xs font-normal text-[#8f887d]">{score.jobDescriptionReady ? `${score.matchedKeywords.length} matched` : "Add a job description"}</span></p></div>
         </div>
       </div>
-      <div className="relative flex flex-col gap-3 border-t border-white/10 bg-[#0b0b09]/90 p-3 md:flex-row md:items-center md:justify-between md:px-5">
-        <div className="flex min-w-0 gap-2 overflow-x-auto">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="flex h-10 shrink-0 border border-white/15 bg-[#090908] p-1" role="group" aria-label="Resume workspace mode">
-            <ModeButton active={mode === "editor"} icon={PencilLine} label="Editor" onClick={() => setMode("editor")} />
+            <ModeButton active={mode === "editor"} icon={PencilLine} label="Edit" onClick={() => setMode("editor")} />
             <ModeButton active={mode === "view"} icon={Eye} label="Preview" onClick={() => setMode("view")} />
           </div>
           <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void importPdf(event.target.files?.[0])} />
           <ToolbarButton icon={importing ? LoaderCircle : Upload} label={importing ? "Reading PDF..." : "Import PDF"} onClick={() => inputRef.current?.click()} disabled={importing} />
-          <ToolbarButton icon={RefreshCw} label="Account resume" onClick={() => { setResume(sourceResume); setStatus("Loaded the current account resume."); }} />
-          <ToolbarButton icon={Save} label="Save draft" onClick={() => void saveDraft()} />
+          <ToolbarButton icon={loadingAccountResume ? LoaderCircle : RefreshCw} label={loadingAccountResume ? "Loading..." : "Reload original"} onClick={() => void loadAccountResume()} disabled={loadingAccountResume} />
         </div>
-        <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={() => void optimizeResume()} disabled={optimizing} className="inline-flex h-10 flex-1 items-center justify-center gap-2 border border-gold/60 bg-gold/8 px-4 text-xs font-bold text-gold hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 md:flex-none">{optimizing ? <LoaderCircle className="animate-spin" size={15} /> : <Bot size={15} />}{optimizing ? "Agent analyzing..." : "Run ATS agent"}</button>
-          <button type="button" onClick={() => downloadResumePdf(resume)} className="inline-flex h-10 flex-1 items-center justify-center gap-2 bg-gold px-4 text-xs font-bold text-ink hover:bg-gold-bright md:flex-none"><Download size={15} />Export PDF</button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void saveDraft()} className="inline-flex h-10 flex-1 items-center justify-center gap-2 border border-white/15 px-3 text-xs font-bold text-[#c8c1b5] hover:border-gold/50 hover:text-gold sm:flex-none"><Save size={14} />Save draft</button>
+          <button type="button" onClick={() => void optimizeResume()} disabled={optimizing} className="inline-flex h-10 flex-1 items-center justify-center gap-2 bg-gold px-4 text-xs font-bold text-ink hover:bg-gold-bright disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">{optimizing ? <LoaderCircle className="animate-spin" size={15} /> : <Sparkles size={15} />}{optimizing ? "Reviewing..." : "Review resume"}</button>
+          <button type="button" title="Export resume as PDF" aria-label="Export resume as PDF" onClick={() => documentMode && documentText ? downloadResumeTextPdf(documentText, resume.name) : downloadResumePdf(resume)} className="grid h-10 w-10 shrink-0 place-items-center border border-white/15 text-[#c8c1b5] hover:border-gold/50 hover:text-gold"><Download size={16} /></button>
         </div>
       </div>
-    </section>
+    </header>
     {(status || error) && <div role={error ? "alert" : "status"} className={`mb-5 border p-3 text-sm ${error ? "border-red-400/25 bg-red-400/5 text-red-300" : "border-emerald-400/20 bg-emerald-400/5 text-emerald-200"}`}>{error || status}</div>}
+    {showEvidenceForm && <section className="mb-5 border border-gold/30 bg-[#12120f] p-5" aria-labelledby="evidence-title"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-gold">Your facts, your words</p><h2 id="evidence-title" className="mt-1 text-base font-semibold text-[#eee9df]">Add details you can stand behind</h2><p className="mt-1 text-xs leading-5 text-[#8f887d]">Required: what you did. Method and outcome help. Leave anything unknown blank; no metrics will be guessed.</p></div><button type="button" title="Close evidence form" onClick={() => setShowEvidenceForm(false)} className="p-1 text-[#8f887d] hover:text-white"><X size={16} /></button></div><div className="mt-4 grid gap-3 md:grid-cols-3"><label className="text-[11px] font-bold text-[#c8c1b5]">What you did · Required<textarea value={candidateEvidence.what} onChange={(event) => setCandidateEvidence((current) => ({ ...current, what: event.target.value }))} rows={3} maxLength={2000} placeholder="Start with an action + object" className="ats-field mt-2 w-full resize-y font-normal" /></label><label className="text-[11px] font-bold text-[#c8c1b5]">How you did it · Recommended<textarea value={candidateEvidence.how} onChange={(event) => setCandidateEvidence((current) => ({ ...current, how: event.target.value }))} rows={3} maxLength={2000} placeholder="Tools, methods, decisions, scope" className="ats-field mt-2 w-full resize-y font-normal" /></label><label className="text-[11px] font-bold text-[#c8c1b5]">What changed · Optional<textarea value={candidateEvidence.result} onChange={(event) => setCandidateEvidence((current) => ({ ...current, result: event.target.value }))} rows={3} maxLength={2000} placeholder="A verified result, or leave blank" className="ats-field mt-2 w-full resize-y font-normal" /></label></div><div className="mt-4 flex justify-end"><button type="button" onClick={retryWithEvidence} disabled={optimizing || Boolean(optimizingField) || !candidateEvidence.what.trim()} className="inline-flex h-10 items-center gap-2 bg-gold px-4 text-xs font-bold text-ink hover:bg-gold-bright disabled:cursor-not-allowed disabled:opacity-50"><Sparkles size={14} />{optimizing || optimizingField ? "Reviewing..." : "Review with these facts"}</button></div></section>}
     {mode === "editor" ? <div className="ats-workspace-grid grid items-start gap-4 xl:grid-cols-[190px_minmax(0,1fr)]">
       <aside className="border border-white/10 bg-[#10100e] lg:sticky lg:top-5 lg:self-start">
         <div className="border-b border-white/10 p-4">
@@ -206,8 +375,15 @@ export function ATSResumeBuilder() {
       </aside>
       <main className="ats-editor-light min-w-0 overflow-hidden border border-[#d9d6cd] bg-[#f5f3ed] text-[#171713]">
         <div className="flex items-center justify-between border-b border-[#d9d6cd] bg-white px-5 py-4 md:px-7"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#8b6823]">Resume details</p><h2 className="mt-1 text-xl font-bold">{section}</h2></div><div className="flex items-center gap-3"><button type="button" onClick={() => setMode("view")} className="inline-flex items-center gap-2 text-xs font-bold text-[#6c665c] hover:text-black"><Eye size={15} />Preview</button><FileText size={20} className="text-[#aaa49a]" /></div></div>
-        <div className="min-h-111.5 p-5 md:p-8"><SectionEditor section={section} resume={resume} setResume={setResume} optimizeField={optimizeField} optimizingField={optimizingField} fieldSuggestion={fieldSuggestion} applyFieldSuggestion={applyFieldSuggestion} dismissFieldSuggestion={() => setFieldSuggestion(null)} /></div>
-        <div className="flex items-center justify-between border-t border-[#d9d6cd] bg-white px-5 py-3 text-[11px] text-[#777066] md:px-7"><span>Changes stay local until you save the draft.</span><button type="button" onClick={() => setSection(SECTIONS[Math.min(SECTIONS.indexOf(section) + 1, SECTIONS.length - 1)])} className="inline-flex items-center gap-1 font-bold text-[#8b6823]">Next section <ChevronRight size={13} /></button></div>
+        <div className="min-h-111.5 p-5 md:p-8">
+          {documentText && <div className="mb-5 flex items-center gap-1 border-b border-[#d9d6cd] pb-3" role="group" aria-label="Resume editing format">
+            <button type="button" aria-pressed={documentMode} onClick={() => setDocumentMode(true)} className={`px-3 py-2 text-xs font-bold ${documentMode ? "bg-[#171713] text-white" : "text-[#6c665c] hover:bg-black/5"}`}>Original text</button>
+            <button type="button" aria-pressed={!documentMode} onClick={() => setDocumentMode(false)} className={`px-3 py-2 text-xs font-bold ${!documentMode ? "bg-[#171713] text-white" : "text-[#6c665c] hover:bg-black/5"}`}>Structured fields</button>
+            {documentMode && <span className="ml-auto text-[10px] text-[#777066]">Line order and bullets retained; PDF typography may differ.</span>}
+          </div>}
+          {documentMode && documentText ? <textarea aria-label="Original resume text" value={documentText} onChange={(event) => { setDocumentText(event.target.value); setResume(resumeFromText(event.target.value)); }} className="ats-field min-h-111.5 w-full resize-y font-mono text-xs leading-6" spellCheck={false} /> : <SectionEditor section={section} resume={resume} setResume={setResume} optimizeField={optimizeField} optimizingField={optimizingField} fieldSuggestion={fieldSuggestion} applyFieldSuggestion={applyFieldSuggestion} dismissFieldSuggestion={() => setFieldSuggestion(null)} questionAnswers={questionAnswers} onQuestionAnswerChange={(term, answer) => setQuestionAnswers((current) => ({ ...current, [term]: answer }))} />}
+        </div>
+        <div className="flex items-center justify-between border-t border-[#d9d6cd] bg-white px-5 py-3 text-[11px] text-[#777066] md:px-7"><span>Save your changes to keep this ATS draft in your account.</span><button type="button" onClick={() => setSection(SECTIONS[Math.min(SECTIONS.indexOf(section) + 1, SECTIONS.length - 1)])} className="inline-flex items-center gap-1 font-bold text-[#8b6823]">Next section <ChevronRight size={13} /></button></div>
       </main>
       <aside className="ats-analysis-panel min-w-0 space-y-4 xl:col-span-2">
         <section className="border border-white/10 bg-[#12120f] p-5">
@@ -215,7 +391,7 @@ export function ATSResumeBuilder() {
         </section>
         <section className="border border-white/10 bg-[#12120f] p-5">
           <div className="flex items-center justify-between gap-3"><label className="text-[10px] font-bold uppercase tracking-[.14em] text-[#8f887d]" htmlFor="job-description">Target job description</label><span className={`text-[10px] font-bold ${jobDescriptionAssessment.ready ? "text-emerald-300" : "text-amber-200"}`}>{jobDescriptionAssessment.ready ? "Ready" : `${jobDescriptionAssessment.wordCount} words`}</span></div>
-          <textarea ref={jobDescriptionRef} id="job-description" value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setError(""); }} rows={7} placeholder="Paste the responsibilities, qualifications, and requirements for one target role..." className={`ats-field mt-3 resize-y ${jobDescription.trim() && !jobDescriptionAssessment.ready ? "border-amber-300/50" : ""}`} />
+          <textarea ref={jobDescriptionRef} id="job-description" value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setError(""); }} onBlur={() => setJobDescription(cleanJobDescription(jobDescription))} onPaste={(event) => { event.preventDefault(); setJobDescription(cleanJobDescription(event.clipboardData.getData("text"))); }} rows={7} placeholder="Paste the responsibilities, qualifications, and requirements for one target role..." className={`ats-field mt-3 resize-y ${jobDescription.trim() && !jobDescriptionAssessment.ready ? "border-amber-300/50" : ""}`} />
           {!jobDescriptionAssessment.ready ? <p className="mt-3 flex gap-2 text-[11px] leading-5 text-amber-100/80"><AlertCircle className="mt-0.5 shrink-0" size={14} />{jobDescriptionAssessment.guidance} Fit keywords stay off until then.</p> : <p className="mt-3 text-[11px] text-[#8f887d]">{score.matchedKeywords.length} matched · {score.missingKeywords.length} missing. Add terms only when truthful.</p>}
           {score.jobDescriptionReady && <><KeywordList title="Matched" values={score.matchedKeywords} tone="matched" /><KeywordList title="Missing" values={score.missingKeywords} tone="missing" /></>}
           <button type="button" onClick={() => void optimizeResume()} disabled={optimizing} className="mt-5 flex h-11 w-full items-center justify-center gap-2 bg-gold px-4 text-xs font-bold text-ink hover:bg-gold-bright disabled:cursor-not-allowed disabled:opacity-50">{optimizing ? <LoaderCircle className="animate-spin" size={16} /> : <Sparkles size={16} />}{optimizing ? "Building review..." : "Run AI optimization"}</button>
@@ -227,11 +403,11 @@ export function ATSResumeBuilder() {
     </div> : <div className="grid items-start gap-5 xl:grid-cols-[minmax(600px,1fr)_320px]">
       <section className="min-w-0 border border-white/10 bg-[#090908] p-3 sm:p-6">
         <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-gold">Document preview</p><p className="mt-1 text-xs text-[#777066]">A4 layout · selectable text · single column</p></div><FileText size={19} className="text-[#777066]" /></div>
-        <div className="overflow-x-auto pb-2"><ResumePreview resume={resume} fullPage /></div>
+        <div className="overflow-x-auto pb-2">{documentMode && documentText ? <pre className="mx-auto min-h-280.75 w-full max-w-198.5 whitespace-pre-wrap bg-[#f4f1e9] p-8 font-mono text-[11px] leading-[1.65] text-[#171713] shadow-[0_24px_70px_rgba(0,0,0,.45)] sm:p-12 md:p-16">{documentText}</pre> : <ResumePreview resume={resume} fullPage />}</div>
       </section>
       <aside className="space-y-5 xl:sticky xl:top-5">
         <section className="border border-white/10 bg-[#10100e] p-5"><div className="flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#777066]">{jobDescription.trim() ? "Job-fit readiness" : "General readiness"} · {ATS_SCORE_VERSION}</p><p className="display-type mt-2 text-5xl font-semibold">{score.total}<span className="text-lg text-[#777066]">/100</span></p></div><span className={`mb-2 h-3 w-3 ${score.total >= 75 ? "bg-emerald-400" : score.total >= 50 ? "bg-amber-400" : "bg-red-400"}`} /></div><p className="mt-3 text-xs leading-5 text-[#777066]">A transparent readiness estimate, not a hiring guarantee.</p></section>
-        <section className="border border-white/10 bg-[#12120f] p-5"><label className="ats-label" htmlFor="view-job-description">Target job description</label><textarea id="view-job-description" value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} rows={7} placeholder="Paste one target job description..." className="ats-field resize-y" /><p className="mt-2 text-[11px] text-[#777066]">{score.matchedKeywords.length} matched · {score.missingKeywords.length} missing</p><KeywordList title="Matched" values={score.matchedKeywords} tone="matched" /><KeywordList title="Missing" values={score.missingKeywords} tone="missing" /></section>
+        <section className="border border-white/10 bg-[#12120f] p-5"><label className="ats-label" htmlFor="view-job-description">Target job description</label><textarea id="view-job-description" value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} onBlur={() => setJobDescription(cleanJobDescription(jobDescription))} onPaste={(event) => { event.preventDefault(); setJobDescription(cleanJobDescription(event.clipboardData.getData("text"))); }} rows={7} placeholder="Paste one target job description..." className="ats-field resize-y" /><p className="mt-2 text-[11px] text-[#777066]">{score.matchedKeywords.length} matched · {score.missingKeywords.length} missing</p><KeywordList title="Matched" values={score.matchedKeywords} tone="matched" /><KeywordList title="Missing" values={score.missingKeywords} tone="missing" /></section>
         <section className="border border-white/10 bg-[#12120f] p-5"><p className="ats-label">Priority improvements</p><div className="space-y-2">{score.suggestions.slice(0, 5).map((suggestion) => <p key={suggestion} className="border-l border-gold/50 pl-3 text-xs leading-5 text-[#aaa397]">{suggestion}</p>)}</div></section>
       </aside>
     </div>}
@@ -241,22 +417,81 @@ export function ATSResumeBuilder() {
 
 function ModeButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Eye; label: string; onClick: () => void }) { return <button type="button" aria-pressed={active} onClick={onClick} className={`inline-flex items-center gap-2 px-3 text-xs font-bold transition ${active ? "bg-paper text-ink" : "text-[#8f887d] hover:text-white"}`}><Icon size={14} />{label}</button>; }
 function ToolbarButton({ icon: Icon, label, onClick, disabled }: { icon: typeof Save; label: string; onClick: () => void; disabled?: boolean }) { return <button type="button" onClick={onClick} disabled={disabled} className="inline-flex h-10 items-center gap-2 border border-white/15 px-3 text-xs font-bold text-[#aaa397] hover:border-white/30 hover:text-white disabled:opacity-50"><Icon size={15} className={label.includes("...") ? "animate-spin" : ""} />{label}</button>; }
-function AgentStep({ number, label, detail, active = false }: { number: string; label: string; detail: string; active?: boolean }) { return <div className={`min-w-0 bg-[#11110e] p-3.5 ${active ? "shadow-[inset_0_-2px_0_#c9a35b]" : ""}`}><div className="flex items-center justify-between gap-2"><span className={active ? "text-gold" : "text-[#625d55]"}>{number}</span>{active && <span className="h-1.5 w-1.5 bg-gold shadow-[0_0_10px_rgba(230,197,122,.7)]" />}</div><p className="mt-2 text-xs font-bold text-[#ded7cc]">{label}</p><p className="mt-1 truncate text-[10px] text-[#777066]">{detail}</p></div>; }
-type FieldAiProps = { onOptimize: () => void; loading: boolean; suggestion?: FieldSuggestion; onApply: () => void; onDismiss: () => void };
+type FieldAiProps = {
+  onOptimize: () => void;
+  loading: boolean;
+  suggestion?: FieldSuggestion;
+  onApply: () => void;
+  onDismiss: () => void;
+  answers: Record<string, TermAnswer>;
+  onAnswerChange: (term: string, answer: TermAnswer) => void;
+  onRegenerate: () => void;
+};
 function FieldAiHeader({ label, ai }: { label: string; ai: FieldAiProps }) { return <span className="mb-2 flex items-center justify-between gap-3"><span className="ats-label mb-0!">{label}</span><button type="button" onClick={ai.onOptimize} disabled={ai.loading} title={`Improve ${label} with AI`} className="inline-flex h-7 items-center gap-1.5 border border-[#c9b06f] bg-[#fffdf7] px-2.5 text-[10px] font-bold text-[#765719] transition hover:border-[#8b6823] hover:bg-[#f7eed5] disabled:cursor-wait disabled:opacity-60">{ai.loading ? <LoaderCircle className="animate-spin" size={12} /> : <Sparkles size={12} />}{ai.loading ? "Thinking" : "Improve"}</button></span>; }
-function FieldSuggestionPanel({ suggestion, onApply, onDismiss }: { suggestion?: FieldSuggestion; onApply: () => void; onDismiss: () => void }) { if (!suggestion) return null; return <div className="mt-2 border border-[#d5c38f] bg-[#fffaf0] p-3"><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><p className="text-[9px] font-bold uppercase text-[#8b6823]">AI suggestion</p><span className="bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">+{suggestion.scoreDelta} ATS</span></div><p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[#27231c]">{suggestion.after}</p></div><button type="button" onClick={onDismiss} title="Dismiss suggestion" className="shrink-0 p-1 text-[#8c8375] hover:text-black"><X size={14} /></button></div><p className="mt-2 text-[10px] leading-4 text-[#756d61]">{suggestion.reason}</p><button type="button" onClick={onApply} className="mt-3 inline-flex h-8 items-center gap-1.5 bg-[#171713] px-3 text-[10px] font-bold text-white hover:bg-black"><Check size={13} />Apply to field</button></div>; }
-function Field({ label, value, onChange, type = "text", ai }: { label: string; value: string; onChange: (value: string) => void; type?: string; ai: FieldAiProps }) { return <div className="block"><FieldAiHeader label={label} ai={ai} /><input aria-label={label} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="ats-field" /><FieldSuggestionPanel suggestion={ai.suggestion} onApply={ai.onApply} onDismiss={ai.onDismiss} /></div>; }
-function ListField({ label, values, onChange, ai }: { label: string; values: string[]; onChange: (values: string[]) => void; ai: FieldAiProps }) { return <div className="block"><FieldAiHeader label={label} ai={ai} /><textarea aria-label={label} value={values.join("\n")} onChange={(event) => onChange(lines(event.target.value))} rows={Math.max(7, Math.min(16, values.length + 3))} className="ats-field resize-y" placeholder="One item per line" /><FieldSuggestionPanel suggestion={ai.suggestion} onApply={ai.onApply} onDismiss={ai.onDismiss} /></div>; }
+function FieldSuggestionPanel({ ai }: { ai: FieldAiProps }) {
+  const suggestion = ai.suggestion;
+  if (!suggestion) return null;
+  const hasChange = suggestion.after.trim() !== suggestion.before.trim();
+  const missingEvidenceQuestions = Array.isArray(suggestion.missingEvidenceQuestions) ? suggestion.missingEvidenceQuestions : [];
+  const verifiedTerms = Array.isArray(suggestion.verifiedTerms) ? suggestion.verifiedTerms : [];
+  const skippedTerms = Array.isArray(suggestion.skippedTerms) ? suggestion.skippedTerms : [];
+  const appliedTerms = Array.isArray(suggestion.addedTerms) ? suggestion.addedTerms : [];
+  const yesAnswers = Object.entries(ai.answers).filter(([, answer]) => answer.status === "yes" && answer.evidence.trim());
+  return <div className="mt-2 border border-[#d5c38f] bg-[#fffaf0] p-3">
+    <div className="flex items-start justify-between gap-3"><div>
+      <div className="flex items-center gap-2"><p className="text-[9px] font-bold uppercase text-[#8b6823]">{hasChange ? "Suggested revision" : "Details needed"}</p>{hasChange && <span className="bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">{suggestion.scoreDelta > 0 ? `+${suggestion.scoreDelta} ATS` : "Review"}</span>}</div>
+      {hasChange && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[#27231c]">{suggestion.after}</p>}
+    </div><button type="button" onClick={ai.onDismiss} title="Dismiss suggestion" className="shrink-0 p-1 text-[#8c8375] hover:text-black"><X size={14} /></button></div>
+    {suggestion.id === "summary" && missingEvidenceQuestions.length > 0 && <div className="mt-3 space-y-3">
+      <p className="text-[10px] font-bold text-[#756d61]">Confirm only what you have actually used:</p>
+      {missingEvidenceQuestions.map((question) => {
+        const term = termFromQuestion(question);
+        const answer = ai.answers[term] || { status: "skip" as const, evidence: "" };
+        return <div key={term} className="border-t border-[#e3dac6] pt-3">
+          <p className="text-xs font-semibold leading-5 text-[#27231c]">{question}</p>
+          <div className="mt-2 flex gap-1" role="group" aria-label={`Have you used ${term}?`}>
+            {(["yes", "no", "skip"] as const).map((status) => <button key={status} type="button" aria-pressed={answer.status === status} onClick={() => ai.onAnswerChange(term, { ...answer, status })} className={`h-7 border px-3 text-[10px] font-bold uppercase ${answer.status === status ? status === "yes" ? "border-emerald-700 bg-emerald-700 text-white" : status === "no" ? "border-red-800 bg-red-800 text-white" : "border-[#171713] bg-[#171713] text-white" : "border-[#d8d0c0] text-[#655e52] hover:border-[#8b6823]"}`}>{status}</button>)}
+          </div>
+          {answer.status === "yes" && <label className="mt-2 block text-[10px] font-semibold text-[#756d61]">Where/how did you use {term}?
+            <textarea value={answer.evidence} onChange={(event) => ai.onAnswerChange(term, { ...answer, evidence: event.target.value })} rows={2} maxLength={2000} placeholder="Project, role, or task where you used it" className="ats-field mt-1 w-full resize-y text-xs font-normal" />
+          </label>}
+        </div>;
+      })}
+      <button type="button" onClick={ai.onRegenerate} disabled={ai.loading || yesAnswers.length === 0} className="inline-flex h-9 items-center gap-2 bg-[#171713] px-3 text-[10px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50">{ai.loading ? <LoaderCircle className="animate-spin" size={13} /> : <Sparkles size={13} />}Regenerate with my answers</button>
+    </div>}
+    {verifiedTerms.length > 0 && <p className="mt-3 text-[10px] leading-4 text-emerald-800">Verified in your answers: {verifiedTerms.join(", ")}</p>}
+    {appliedTerms.length > 0 && <p className="mt-1 text-[10px] leading-4 text-emerald-800">Included in this revision: {appliedTerms.join(", ")}</p>}
+    {skippedTerms.length > 0 && <p className="mt-1 text-[10px] leading-4 text-[#756d61]">Not added to the Summary: {skippedTerms.join(", ")}</p>}
+    {suggestion.id === "summary" && !hasChange && <p className="mt-2 text-xs font-semibold text-amber-800">No Summary text changed. Review the confirmed terms above; add more specific evidence or edit the Summary directly.</p>}
+    {suggestion.id === "summary" && <p className="mt-2 text-[10px] leading-4 text-[#756d61]">Score after this revision: {suggestion.scoreDelta >= 0 ? "+" : ""}{suggestion.scoreDelta} overall · {suggestion.matchedDelta >= 0 ? "+" : ""}{suggestion.matchedDelta} matched · {suggestion.missingDelta > 0 ? "+" : ""}{suggestion.missingDelta} missing</p>}
+    <p className="mt-2 text-[10px] leading-4 text-[#756d61]">{suggestion.reason}</p>
+    {hasChange && <button type="button" onClick={ai.onApply} className="mt-3 inline-flex h-8 items-center gap-1.5 bg-[#171713] px-3 text-[10px] font-bold text-white hover:bg-black"><Check size={13} />Apply to field</button>}
+  </div>;
+}
+function Field({ label, value, onChange, type = "text", ai }: { label: string; value: string; onChange: (value: string) => void; type?: string; ai: FieldAiProps }) { return <div className="block"><FieldAiHeader label={label} ai={ai} /><input aria-label={label} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="ats-field" /><FieldSuggestionPanel ai={ai} /></div>; }
+function ListField({ label, values, onChange, ai }: { label: string; values: string[]; onChange: (values: string[]) => void; ai: FieldAiProps }) { return <div className="block"><FieldAiHeader label={label} ai={ai} /><textarea aria-label={label} value={values.join("\n")} onChange={(event) => onChange(lines(event.target.value))} rows={Math.max(7, Math.min(16, values.length + 3))} className="ats-field resize-y" placeholder="One item per line" /><FieldSuggestionPanel ai={ai} /></div>; }
 
-function SectionEditor({ section, resume, setResume, optimizeField, optimizingField, fieldSuggestion, applyFieldSuggestion, dismissFieldSuggestion }: { section: Section; resume: ATSResume; setResume: React.Dispatch<React.SetStateAction<ATSResume>>; optimizeField: (request: FieldOptimizationRequest) => Promise<void>; optimizingField: string; fieldSuggestion: FieldSuggestion | null; applyFieldSuggestion: () => void; dismissFieldSuggestion: () => void }) {
+function SectionEditor({ section, resume, setResume, optimizeField, optimizingField, fieldSuggestion, applyFieldSuggestion, dismissFieldSuggestion, questionAnswers, onQuestionAnswerChange }: { section: Section; resume: ATSResume; setResume: React.Dispatch<React.SetStateAction<ATSResume>>; optimizeField: (request: FieldOptimizationRequest) => Promise<void>; optimizingField: string; fieldSuggestion: FieldSuggestion | null; applyFieldSuggestion: () => void; dismissFieldSuggestion: () => void; questionAnswers: Record<string, TermAnswer>; onQuestionAnswerChange: (term: string, answer: TermAnswer) => void }) {
   const set = <Key extends keyof ATSResume>(field: Key, value: ATSResume[Key]) => setResume((current) => ({ ...current, [field]: value }));
-  const ai = (request: FieldOptimizationRequest): FieldAiProps => ({ onOptimize: () => void optimizeField(request), loading: optimizingField === request.id, suggestion: fieldSuggestion?.id === request.id ? fieldSuggestion : undefined, onApply: applyFieldSuggestion, onDismiss: dismissFieldSuggestion });
+  const ai = (request: FieldOptimizationRequest): FieldAiProps => ({ onOptimize: () => void optimizeField(request), loading: optimizingField === request.id, suggestion: fieldSuggestion?.id === request.id ? fieldSuggestion : undefined, onApply: applyFieldSuggestion, onDismiss: dismissFieldSuggestion, answers: questionAnswers, onAnswerChange: onQuestionAnswerChange, onRegenerate: () => void optimizeField(request) });
   const stringRequest = (field: "name" | "headline" | "email" | "phone" | "location" | "summary", label: string): FieldOptimizationRequest => ({ id: field, label, before: resume[field], read: (candidate) => candidate[field], apply: (current, value) => ({ ...current, [field]: value }) });
   const listRequest = (field: "skills" | "experience" | "education" | "achievements" | "certifications" | "languages", label: string): FieldOptimizationRequest => ({ id: field, label, before: resume[field].join("\n"), read: (candidate) => candidate[field].join("\n"), apply: (current, value) => ({ ...current, [field]: lines(value) }) });
   if (section === "Personal") return <div className="grid gap-5 sm:grid-cols-2"><Field label="Full name" value={resume.name} onChange={(value) => set("name", value)} ai={ai(stringRequest("name", "Full name"))} /><Field label="Professional headline" value={resume.headline} onChange={(value) => set("headline", value)} ai={ai(stringRequest("headline", "Professional headline"))} /><Field label="Email" type="email" value={resume.email} onChange={(value) => set("email", value)} ai={ai(stringRequest("email", "Email"))} /><Field label="Phone" type="tel" value={resume.phone} onChange={(value) => set("phone", value)} ai={ai(stringRequest("phone", "Phone"))} /><div className="sm:col-span-2"><Field label="Location" value={resume.location} onChange={(value) => set("location", value)} ai={ai(stringRequest("location", "Location"))} /></div></div>;
   if (section === "Summary") return <ListField label="Professional summary" values={resume.summary ? [resume.summary] : []} onChange={(value) => set("summary", value.join("\n"))} ai={ai(stringRequest("summary", "Professional summary"))} />;
   if (section === "Skills") return <ListField label="Skills" values={resume.skills} onChange={(value) => set("skills", value)} ai={ai(listRequest("skills", "Skills"))} />;
-  if (section === "Experience") return <ListField label="Experience entries or achievement bullets" values={resume.experience} onChange={(value) => set("experience", value)} ai={ai(listRequest("experience", "Experience"))} />;
+  if (section === "Experience") return <div className="space-y-4">{resume.experience.map((entry, index) => {
+    const request: FieldOptimizationRequest = {
+      id: `experience-${index}`,
+      label: `Experience line ${index + 1}`,
+      before: entry,
+      targetLine: entry,
+      targetIndex: index,
+      read: (candidate) => candidate.experience[index] || "",
+      apply: (current, value) => ({ ...current, experience: current.experience.map((line, lineIndex) => lineIndex === index ? value : line) }),
+    };
+    const fieldAi = ai(request);
+    return <div key={`${index}-${entry.slice(0, 24)}`} className="border-b border-[#d9d6cd] pb-4 last:border-0"><FieldAiHeader label={request.label} ai={fieldAi} /><textarea aria-label={request.label} value={entry} onChange={(event) => set("experience", resume.experience.map((line, lineIndex) => lineIndex === index ? event.target.value : line))} rows={Math.max(2, Math.min(5, Math.ceil(entry.length / 90)))} className="ats-field w-full resize-y" /><FieldSuggestionPanel ai={fieldAi} /></div>;
+  })}{resume.experience.length === 0 && <p className="text-sm text-[#777066]">No experience lines yet. Add one truthful line to start a review.</p>}</div>;
   if (section === "Education") return <ListField label="Education entries" values={resume.education} onChange={(value) => set("education", value)} ai={ai(listRequest("education", "Education"))} />;
   if (section === "Achievements") return <ListField label="Achievements" values={resume.achievements} onChange={(value) => set("achievements", value)} ai={ai(listRequest("achievements", "Achievements"))} />;
   if (section === "Certifications") return <ListField label="Certifications" values={resume.certifications} onChange={(value) => set("certifications", value)} ai={ai(listRequest("certifications", "Certifications"))} />;
@@ -270,7 +505,7 @@ function ResumePreview({ resume, fullPage = false }: { resume: ATSResume; fullPa
   const sectionClass = fullPage ? "mt-7" : "mt-5";
   const headingClass = fullPage ? "text-[11px]" : "text-[10px]";
   const bodyClass = fullPage ? "text-[11px] leading-[1.65]" : "text-[9px] leading-4";
-  const list = (title: string, values: string[]) => values.length ? <section className={sectionClass}><h3 className={`border-b border-black/30 pb-1 font-bold uppercase tracking-[.12em] ${headingClass}`}>{title}</h3><ul className={`mt-2 space-y-1 ${bodyClass}`}>{values.map((value, index) => <li key={index}>• {value}</li>)}</ul></section> : null;
+  const list = (title: string, values: string[]) => values.length ? <section className={sectionClass}><h3 className={`border-b border-black/30 pb-1 font-bold uppercase tracking-[.12em] ${headingClass}`}>{title}</h3><ul className={`mt-2 space-y-1 ${bodyClass}`}>{values.map((value, index) => <li key={index}>{/^[•*-]\s/.test(value) ? value : `• ${value}`}</li>)}</ul></section> : null;
   return <article className={`mx-auto bg-[#f4f1e9] text-[#171713] shadow-[0_24px_70px_rgba(0,0,0,.45)] ${fullPage ? "min-h-280.75 w-full max-w-198.5 p-8 sm:p-12 md:p-16" : "min-h-147.5 p-7"}`}>
     <h2 className={`font-serif font-bold ${fullPage ? "text-4xl" : "text-2xl"}`}>{resume.name || "Your Name"}</h2>
     <p className={`mt-1 font-bold ${fullPage ? "text-sm" : "text-xs"}`}>{resume.headline}</p>

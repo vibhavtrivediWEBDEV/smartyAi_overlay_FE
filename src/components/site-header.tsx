@@ -20,6 +20,7 @@ declare global {
 
 const links = [
   ["Product", "/features"],
+  ["Response Studio", "/features#response-studio"],
   ["Pricing", "/pricing"],
   ["Security", "/security"],
   ["Support", "/macos"],

@@ -73,3 +73,10 @@ jobs:
               --connect-timeout 10 --max-time 20 --output /dev/null \
               --write-out "$url HTTP %{http_code}\n" "$url"
           done
+          sitemap=$(curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            --connect-timeout 10 --max-time 20 https://bhavishya.site/sitemap.xml)
+          [[ "$sitemap" == *'<loc>https://bhavishya.site/security</loc>'* ]]
+          [[ "$sitemap" != *'<lastmod>'* ]]
+          robots=$(curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            --connect-timeout 10 --max-time 20 https://bhavishya.site/robots.txt)
+          [[ "$robots" == *'Sitemap: https://bhavishya.site/sitemap.xml'* ]]

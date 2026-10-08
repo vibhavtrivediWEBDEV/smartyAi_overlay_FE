@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -13,27 +14,23 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-  ),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "SmartyAI Demo | Conversation workspace preview",
+    default: "SmartyAI | Real-time Interview Assistance",
     template: "%s | SmartyAI",
   },
   description:
-    "An interactive, non-production preview of the intended SmartyAI conversation workspace.",
-  alternates: { canonical: "/" },
+    "Real-time interview assistance with contextual AI, a compact desktop overlay, and permission-based audio and screen tools.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
     apple: "/favicon.svg",
   },
   openGraph: {
-    title: "SmartyAI Demo",
-    description: "Interactive product preview. Do not submit sensitive data.",
     type: "website",
     siteName: "SmartyAI",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
